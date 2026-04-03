@@ -128,7 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 userId: userId ?? "",
             });
         }
-         
     }, []);
 
     // Clean up timer on unmount
@@ -137,6 +136,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
         };
     }, []);
+
+    // Re-validate token when page becomes visible (handles suspension case)
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === "visible") {
+                const { refreshToken, expiryMs } = readStorage();
+                if (refreshToken && Date.now() >= expiryMs - REFRESH_BEFORE_MS) {
+                    refreshAccessToken(refreshToken)
+                        .then(applyToken)
+                        .catch(() => {
+                            clearStorage();
+                            setToken(null);
+                            setUserId(null);
+                        });
+                }
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibility);
+        return () => document.removeEventListener("visibilitychange", handleVisibility);
+    }, [applyToken]);
 
     const signIn = useCallback(async () => {
         try {

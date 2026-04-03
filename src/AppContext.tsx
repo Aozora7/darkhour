@@ -60,6 +60,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
     }, [auth.token, auth.userId, data.records.length, data.fetching, data.startFetch]);
 
+    // Reset auto-fetch guard when token changes (allows retry after token refresh)
+    useEffect(() => {
+        autoFetchedRef.current = false;
+    }, [auth.token]);
+
     // Date range filter state
     const [filterStart, setFilterStart] = useState(0);
     const [filterEnd, setFilterEnd] = useState(0);
