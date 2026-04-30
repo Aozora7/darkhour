@@ -1,10 +1,10 @@
 import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { startAuth, exchangeCode, refreshAccessToken, type TokenResult } from "./oauth";
 
-const STORAGE_TOKEN = "fitbit_token";
-const STORAGE_USER_ID = "fitbit_user_id";
-const STORAGE_REFRESH_TOKEN = "fitbit_refresh_token";
-const STORAGE_TOKEN_EXPIRY = "fitbit_token_expiry"; // epoch ms
+const STORAGE_TOKEN = "googlehealth_token";
+const STORAGE_USER_ID = "googlehealth_user_id";
+const STORAGE_REFRESH_TOKEN = "googlehealth_refresh_token";
+const STORAGE_TOKEN_EXPIRY = "googlehealth_token_expiry"; // epoch ms
 
 /** Minutes before expiry at which we proactively refresh */
 const REFRESH_BEFORE_MS = 5 * 60 * 1000;
@@ -22,7 +22,9 @@ function writeStorage({ accessToken, refreshToken, expiresIn, userId }: TokenRes
     const expiryMs = Date.now() + expiresIn * 1000;
     localStorage.setItem(STORAGE_TOKEN, accessToken);
     localStorage.setItem(STORAGE_USER_ID, userId);
-    localStorage.setItem(STORAGE_REFRESH_TOKEN, refreshToken);
+    if (refreshToken) {
+        localStorage.setItem(STORAGE_REFRESH_TOKEN, refreshToken);
+    }
     localStorage.setItem(STORAGE_TOKEN_EXPIRY, String(expiryMs));
     return expiryMs;
 }
@@ -72,7 +74,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const currentRefresh = localStorage.getItem(STORAGE_REFRESH_TOKEN);
             if (!currentRefresh) return;
             refreshAccessToken(currentRefresh)
-                .then(applyToken)
+                .then((result) => {
+                    // Some providers may not return refresh_token on refresh; keep current one.
+                    if (!result.refreshToken) {
+                        result.refreshToken = currentRefresh;
+                    }
+                    applyToken(result);
+                })
                 .catch(() => {
                     // Refresh failed — clear token so user sees sign-in prompt
                     clearStorage();
@@ -110,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setLoading(true);
             refreshAccessToken(refreshToken)
                 .then((result) => {
+                    if (!result.refreshToken) result.refreshToken = refreshToken;
                     applyToken(result);
                     setError(null);
                 })
@@ -144,7 +153,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const { refreshToken, expiryMs } = readStorage();
                 if (refreshToken && Date.now() >= expiryMs - REFRESH_BEFORE_MS) {
                     refreshAccessToken(refreshToken)
-                        .then(applyToken)
+                        .then((result) => {
+                            if (!result.refreshToken) result.refreshToken = refreshToken;
+                            applyToken(result);
+                        })
                         .catch(() => {
                             clearStorage();
                             setToken(null);

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Client-side React app that visualizes Fitbit sleep data as an actogram with circadian rhythm analysis, designed for people with non-24-hour sleep-wake disorder (N24).
+Client-side React app that visualizes Google Health sleep data as an actogram with circadian rhythm analysis, designed for people with non-24-hour sleep-wake disorder (N24).
 
 ## Commands
 
@@ -37,8 +37,8 @@ ESLint (`eslint.config.js`) and Prettier (`.prettierrc`) are configured. Run `np
 | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | `src/AppContextDef.ts`                           | `ScheduleEntry`, `AppState` interfaces + `AppContext` object (no component)           |
 | `src/AppContext.tsx`                             | `AppProvider` component — all state, derived values, viz settings                     |
-| `src/api/types.ts`                               | `RawSleepRecordV12` (API) and `SleepRecord` (internal) type definitions               |
-| `src/data/useFitbitData.ts`                      | Data orchestrator: cache-first fetch, export, abort                                   |
+| `src/api/types.ts`                               | Legacy raw types + `SleepRecord` (internal) type definitions                          |
+| `src/data/useGoogleHealthData.ts`                | Data orchestrator: cache-first fetch, export, abort                                   |
 | `src/models/circadian/`                          | Circadian period estimation module (pluggable algorithms)                             |
 | `src/models/circadian/index.ts`                  | Public API: `analyzeWithAlgorithm()`, `DEFAULT_ALGORITHM_ID`, type exports            |
 | `src/models/circadian/types.ts`                  | Base types: `CircadianAnalysis`, `CircadianDay`, `GAP_THRESHOLD_DAYS`                 |
@@ -57,10 +57,7 @@ ESLint (`eslint.config.js`) and Prettier (`.prettierrc`) are configured. Run `np
 
 ## Conventions
 
-- **Update docs with code** — When adding, removing, or modifying files or public interfaces, update all affected documentation in the same response. Do not defer to a separate step. The documentation files are:
-    - `CLAUDE.md` — commands, architecture, key files table, conventions
-    - `docs/technical.md` — implementation details, data flow, algorithm descriptions, algorithm parameters, test coverage
-    - `docs/structure.md` — file listing with per-file descriptions
+- **Update docs with code** — When adding, removing, or modifying files or public interfaces, update all affected documentation in the same response. Do not defer to a separate step.
 - **All timestamps use local time**, not UTC — day boundaries use `Date.setHours(0,0,0,0)` and manual `getFullYear()/getMonth()/getDate()` formatting
 - **Viz settings persist** via `usePersistedState` hook (localStorage keys prefixed `viz.`, including `viz.circadianModel`)
 - **Algorithm registry** — `CircadianAlgorithm` interface defines `id`, `name`, `description`, `analyze()`; algorithms register via `registerAlgorithm()` at module load
@@ -78,8 +75,3 @@ ESLint (`eslint.config.js`) and Prettier (`.prettierrc`) are configured. Run `np
 - **This is a TypeScript ESM project.** — Do not use CommonJS patterns (require, module.exports). Hook scripts and config files that need CommonJS must use .cjs extension.
 - **Do not use names or contents of test datasets in documentation or tests.**
 
-## Documentation
-
-- `docs/technical.md` — Implementation details, data flow, algorithm descriptions, algorithm parameters, test coverage
-- `docs/domain.md` — Domain knowledge: N24 disorder, actogram methodology, circadian estimation theory
-- `docs/structure.md` — Detailed file listing with per-file descriptions

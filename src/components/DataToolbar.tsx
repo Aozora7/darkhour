@@ -153,7 +153,7 @@ export default function DataToolbar() {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
                         a.href = url;
-                        a.download = `fitbit-sleep-overlay-${new Date().toISOString().slice(0, 10)}.json`;
+                        a.download = `sleep-overlay-${new Date().toISOString().slice(0, 10)}.json`;
                         a.click();
                         URL.revokeObjectURL(url);
                     }}

@@ -20,7 +20,7 @@ export default function Header() {
             <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-100">N24 Sleep Visualization</h1>
                 <a
-                    href="https://github.com/Aozora7/fitbit-n24"
+                    href="https://github.com/Aozora7/darkhour"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-gray-500 hover:text-gray-300"
@@ -73,7 +73,7 @@ const Privacy = ({ onClose }: { onClose: () => void }) => (
         </div>
         <p className="mb-2">
             This app runs entirely in your browser. Your sleep data is never sent to any server controlled by the app
-            developer. When you sign in with Fitbit, the data goes directly from Fitbit to your browser. Nothing is
+            developer. When you sign in with Google, the data goes directly from Google to your browser. Nothing is
             stored anywhere except on your own device.
         </p>
         <details className="text-gray-400">
@@ -86,18 +86,18 @@ const Privacy = ({ onClose }: { onClose: () => void }) => (
                 </li>
                 <li>
                     All API requests go directly from your browser to{" "}
-                    <code className="text-gray-300">api.fitbit.com</code>. No proxy involved.
+                    <code className="text-gray-300">health.googleapis.com</code>. No proxy involved.
                 </li>
                 <li>No cookies, tracking pixels, or third-party scripts.</li>
                 <li>
-                    Revoke access anytime at{" "}
+                    Revoke access anytime in{" "}
                     <a
-                        href="https://www.fitbit.com/settings/applications"
+                        href="https://myaccount.google.com/permissions"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-400 hover:underline"
                     >
-                        fitbit.com/settings/applications
+                        your Google Account permissions
                     </a>
                     .
                 </li>

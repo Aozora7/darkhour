@@ -1,15 +1,37 @@
-const FITBIT_AUTH_URL = "https://www.fitbit.com/oauth2/authorize";
-const FITBIT_TOKEN_URL = "https://api.fitbit.com/oauth2/token";
-const SCOPES = "sleep";
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const SCOPES = "openid https://www.googleapis.com/auth/googlehealth.sleep.readonly";
 
 function getClientId(): string {
-    const id = import.meta.env.VITE_FITBIT_CLIENT_ID as string | undefined;
-    if (!id) throw new Error("VITE_FITBIT_CLIENT_ID is not set in .env");
+    const id = import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_ID as string | undefined;
+    if (!id) throw new Error("VITE_GOOGLE_HEALTH_CLIENT_ID is not set in .env");
     return id;
+}
+
+function getClientSecret(): string {
+    const secret = import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_SECRET as string | undefined;
+    if (!secret) throw new Error("VITE_GOOGLE_HEALTH_CLIENT_SECRET is not set in .env");
+    return secret;
 }
 
 function getRedirectUri(): string {
     return window.location.origin + "/";
+}
+
+function decodeBase64Url(input: string): string {
+    const base64 = input.replace(/-/g, "+").replace(/_/g, "/");
+    const padLen = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + "=".repeat(padLen);
+    return atob(padded);
+}
+
+function getSubFromIdToken(idToken: string): string {
+    const parts = idToken.split(".");
+    if (parts.length < 2) throw new Error("Invalid id_token");
+    const payloadJson = decodeBase64Url(parts[1]!);
+    const payload = JSON.parse(payloadJson) as { sub?: string };
+    if (!payload.sub) throw new Error("id_token missing sub");
+    return payload.sub;
 }
 
 /** Generate a cryptographically random string for PKCE code_verifier */
@@ -30,7 +52,7 @@ async function computeChallenge(verifier: string): Promise<string> {
 
 /**
  * Start the OAuth PKCE authorization flow.
- * Generates a verifier, stores it, and redirects to Fitbit.
+ * Generates a verifier, stores it, and redirects to Google.
  */
 export async function startAuth(): Promise<void> {
     const verifier = generateVerifier();
@@ -47,9 +69,11 @@ export async function startAuth(): Promise<void> {
         scope: SCOPES,
         code_challenge: challenge,
         code_challenge_method: "S256",
+        access_type: "offline",
+        prompt: "consent",
     });
 
-    window.location.href = `${FITBIT_AUTH_URL}?${params.toString()}`;
+    window.location.href = `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
 export interface TokenResult {
@@ -60,7 +84,7 @@ export interface TokenResult {
 }
 
 async function postToTokenEndpoint(body: URLSearchParams): Promise<TokenResult> {
-    const response = await fetch(FITBIT_TOKEN_URL, {
+    const response = await fetch(GOOGLE_TOKEN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
@@ -74,15 +98,18 @@ async function postToTokenEndpoint(body: URLSearchParams): Promise<TokenResult> 
     const data = (await response.json()) as {
         access_token: string;
         expires_in: number;
-        refresh_token: string;
-        user_id: string;
+        refresh_token?: string;
+        id_token?: string;
     };
+
+    if (!data.id_token) throw new Error("Token response missing id_token");
+    const userId = getSubFromIdToken(data.id_token);
 
     return {
         accessToken: data.access_token,
         expiresIn: data.expires_in,
-        refreshToken: data.refresh_token,
-        userId: data.user_id,
+        refreshToken: data.refresh_token ?? "",
+        userId,
     };
 }
 
@@ -95,10 +122,12 @@ export async function exchangeCode(code: string): Promise<TokenResult> {
     if (!verifier) throw new Error("No PKCE verifier found in session");
 
     const clientId = getClientId();
+    const clientSecret = getClientSecret();
     const redirectUri = getRedirectUri();
 
     const body = new URLSearchParams({
         client_id: clientId,
+        client_secret: clientSecret,
         grant_type: "authorization_code",
         code,
         redirect_uri: redirectUri,
@@ -112,13 +141,15 @@ export async function exchangeCode(code: string): Promise<TokenResult> {
 
 /**
  * Use a refresh token to obtain a new access token.
- * Fitbit uses rolling refresh — the returned refreshToken replaces the old one.
+ * Some providers use rolling refresh — the returned refreshToken may replace the old one.
  */
 export async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
     const clientId = getClientId();
+    const clientSecret = getClientSecret();
 
     const body = new URLSearchParams({
         client_id: clientId,
+        client_secret: clientSecret,
         grant_type: "refresh_token",
         refresh_token: refreshToken,
     });

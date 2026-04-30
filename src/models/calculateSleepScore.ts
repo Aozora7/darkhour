@@ -1,7 +1,7 @@
 import type { RawSleepRecordV12 } from "../api/types";
 
 export function calculateSleepScore(record: RawSleepRecordV12) {
-    // Regression weights derived from fitting to a dataset of Fitbit sleep records with known quality scores.
+    // Regression weights derived from fitting to a dataset of sleep records with known quality scores.
     const INTERCEPT = 66.60654843292923;
     const W_DURATION = 9.071460795887447;
     const W_DEEP_PLUS_REM = 0.1110083920616658;

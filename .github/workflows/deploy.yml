@@ -31,7 +31,8 @@ jobs:
 
       - run: npm run build
         env:
-          VITE_FITBIT_CLIENT_ID: ${{ secrets.VITE_FITBIT_CLIENT_ID }}
+          VITE_GOOGLE_HEALTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_HEALTH_CLIENT_ID }}
+          VITE_GOOGLE_HEALTH_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_HEALTH_CLIENT_SECRET }}
 
       - uses: actions/configure-pages@v5
 

@@ -1,12 +1,12 @@
-# fitbit-n24
+# darkhour
 
-https://n24.aozora.one/
+https://25h.aozora.one/
 
-![screenshot](https://github.com/Aozora7/fitbit-n24/raw/master/images/screenshot.png)
+![screenshot](https://github.com/Aozora7/darkhour/raw/master/images/screenshot.png)
 
-A client-side React application that visualizes Fitbit sleep data in a way that's helpful for people with non-24-hour sleep-wake disorder (N24). The main feature is an actogram with sleep stage data, and an overlay that displays estimated circadian night on each day, calculated based on the entire visible data set.
+A client-side React application that visualizes Google Health sleep data in a way that's helpful for people with non-24-hour sleep-wake disorder (N24). The main feature is an actogram with sleep stage data (when available), and an overlay that displays estimated circadian night on each day, calculated based on the entire visible data set.
 
-In many aspects inspired by [fitbit-sleep-vis](https://github.com/carrotflakes/fitbit-sleep-vis) as I've been using it for years, but this project is written completely from scratch due to vastly different objectives and implementation besides fetching.
+Inspired by existing sleep visualization tools, but written completely from scratch due to different objectives and implementation.
 
 ## Features
 
@@ -28,7 +28,7 @@ In many aspects inspired by [fitbit-sleep-vis](https://github.com/carrotflakes/f
 
 **Data**
 
-- Fetch from Fitbit API with progressive loading and IndexedDB caching
+- Fetch from Google Health API with progressive loading and IndexedDB caching
 - Import/export JSON
 - Date range filter for all visualizations and calculations
 - Export what you see as PNG
@@ -52,31 +52,31 @@ npm run dev
 
 Open http://localhost:5173.
 
-### Fitbit API setup
+### Google Health API setup
 
-To fetch data directly from the Fitbit API:
+To fetch data directly from the Google Health API:
 
-1. Register an app at https://dev.fitbit.com/apps/new
-    - OAuth 2.0 Application Type: **Client**
-    - Callback URL: `http://localhost:5173`
+1. Create OAuth credentials in Google Cloud Console
+    - OAuth client type: **Web application**
+    - Authorized redirect URI: `http://localhost:5173/`
 2. Copy `.env.example` to `.env` and fill in your client ID:
     ```
-    VITE_FITBIT_CLIENT_ID=your_client_id_here
+    VITE_GOOGLE_HEALTH_CLIENT_ID=your_client_id_here
     ```
-3. Start the dev server and click "Sign in with Fitbit"
+3. Start the dev server and click "Sign in"
 
 ### Data sources
 
 The app starts empty. You can:
 
-- **Fetch from Fitbit**: Sign in via OAuth and fetch all historical sleep data (v1.2 API with sleep stages). Data is cached in IndexedDB; subsequent fetches only retrieve new records.
-- **Import JSON**: Load a previously exported file or raw Fitbit API v1.2 response data.
+- **Fetch from Google Health**: Sign in via OAuth and fetch all historical sleep data. Data is cached in IndexedDB; subsequent fetches only retrieve new records.
+- **Import JSON**: Load a previously exported file or raw API response data.
 - **Import Google Takeout data**: Multiple sleep-YYYY-MM-DD.json files from Takeout can be imported at the same time.
 - **Export JSON**: Save the current dataset as a JSON file that can be re-imported later.
 
 Supported import formats:
 
-- Fitbit API v1.2 response: `{ "sleep": [...] }` or array of pages
+- App export format: `{ "sleep": [...] }`
 - Flat array of records: `[ { dateOfSleep, startTime, ... }, ... ]`
 - Previously exported data from this app
 
@@ -89,7 +89,7 @@ src/
   AppContext.tsx        Global state, derived values, context provider
   index.css             Tailwind directives + global styles
 
-  api/                  Fitbit API types, fetch wrapper, paginated sleep list
+  api/                  API types, fetch wrappers, paging implementations
   auth/                 OAuth 2.0 PKCE flow, auth context provider
   data/                 Data loading, IndexedDB caching, fetch orchestration
   models/               Actogram row transform, circadian estimation, sleep scoring, periodogram

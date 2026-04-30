@@ -1,4 +1,4 @@
-// ─── Fitbit Sleep API v1.2 (stages) ────────────────────────────────
+// ─── Legacy sleep record format (v1.2 stages/classic) ──────────────
 
 export type SleepStageLevel = "wake" | "light" | "deep" | "rem";
 
@@ -44,22 +44,6 @@ export interface RawSleepRecordV12 {
     minutesToFallAsleep: number;
     timeInBed: number;
     type: "stages" | "classic";
-}
-
-// ─── Raw API response shapes ───────────────────────────────────────
-
-/** v1.2 format: single page with sleep array + pagination */
-export interface FitbitSleepPageV12 {
-    sleep: RawSleepRecordV12[];
-    pagination?: {
-        beforeDate?: string;
-        afterDate?: string;
-        limit?: number;
-        next?: string;
-        offset?: number;
-        previous?: string;
-        sort?: string;
-    };
 }
 
 // ─── Unified internal types ────────────────────────────────────────

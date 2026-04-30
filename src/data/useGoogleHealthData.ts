@@ -1,47 +1,31 @@
 import { useState, useCallback, useRef } from "react";
-import { useSleepData, parseApiRecords } from "./useSleepData";
-import { fetchAllSleepRecords, fetchNewSleepRecords } from "../api/sleepApi";
-import { getCachedRecords, getLatestDateOfSleep, putRecords, clearUserCache } from "./sleepCache";
-import type { RawSleepRecordV12, SleepRecord } from "../api/types";
+import { useSleepData } from "./useSleepData";
+import { fetchAllSleepRecords, fetchNewSleepRecords } from "../api/googlehealth/api";
+import { getCachedRecords, getLatestDateOfSleep, putRecords, clearUserCache } from "../api/googlehealth/cache";
+import type { GoogleHealthSleepDataPoint } from "../api/googlehealth/types";
+import { parseGoogleHealthDataPoints } from "../api/googlehealth/parse";
+import type { SleepRecord } from "../api/types";
 
-export interface FitbitDataState {
-    /** All parsed sleep records (unfiltered) */
+export interface GoogleHealthDataState {
     records: SleepRecord[];
-    /** Whether initial data is loading */
     loading: boolean;
-    /** Data-level error message */
     error: string | null;
-    /** Whether a fetch is in progress */
     fetching: boolean;
-    /** Human-readable fetch progress string */
     fetchProgress: string;
-    /** Start fetching sleep records (loads cache first, then fetches only new data) */
     startFetch: (token: string, userId: string) => void;
-    /** Abort the current fetch (keeps already-fetched data) */
     stopFetch: () => void;
-    /** Load records from one or more JSON files, merging all into one dataset */
     importFromFiles: (files: File[]) => Promise<void>;
-    /** Download all records as a JSON file */
     exportToFile: () => void;
-    /** Clear the IndexedDB cache for a user and reset in-memory state */
     clearCache: (userId: string) => Promise<void>;
-    /** Clear in-memory state only (e.g. on sign-out) */
     reset: () => void;
 }
 
-/**
- * Encapsulates all data-fetching, import, and export logic.
- * Returns a stable interface that UI components can consume
- * without knowing about raw API records, abort controllers, etc.
- */
-export function useFitbitData(): FitbitDataState {
+export function useGoogleHealthData(): GoogleHealthDataState {
     const { records, loading, error, setRecords, appendRecords, importFromFiles } = useSleepData();
-
     const [fetching, setFetching] = useState(false);
     const [fetchProgress, setFetchProgress] = useState("");
 
-    // Keep raw API records for clean round-trip export
-    const rawRecordsRef = useRef<RawSleepRecordV12[]>([]);
+    const rawRecordsRef = useRef<GoogleHealthSleepDataPoint[]>([]);
     const fetchAbortRef = useRef<AbortController | null>(null);
 
     const startFetch = useCallback(
@@ -51,15 +35,13 @@ export function useFitbitData(): FitbitDataState {
             setFetching(true);
             setFetchProgress("Loading cached data...");
 
-            // Track new records fetched from API (for writing to cache at the end)
-            const newRawRecords: RawSleepRecordV12[] = [];
+            const newRawRecords: GoogleHealthSleepDataPoint[] = [];
 
             try {
-                // Phase 1: Load from IndexedDB cache
                 const cachedRaw = await getCachedRecords(userId);
                 if (cachedRaw.length > 0) {
                     rawRecordsRef.current = [...cachedRaw];
-                    const parsed = parseApiRecords(cachedRaw);
+                    const parsed = parseGoogleHealthDataPoints(cachedRaw);
                     setRecords(parsed);
                     setFetchProgress(`Loaded ${cachedRaw.length} cached records. Checking for new data...`);
                 } else {
@@ -68,13 +50,12 @@ export function useFitbitData(): FitbitDataState {
                     setFetchProgress("Starting...");
                 }
 
-                // Phase 2: Incremental or full fetch
                 const latestDate = await getLatestDateOfSleep(userId);
 
-                const onPageData = (pageRecords: RawSleepRecordV12[], totalSoFar: number, page: number) => {
+                const onPageData = (pageRecords: GoogleHealthSleepDataPoint[], totalSoFar: number, page: number) => {
                     rawRecordsRef.current.push(...pageRecords);
                     newRawRecords.push(...pageRecords);
-                    const parsed = parseApiRecords(pageRecords);
+                    const parsed = parseGoogleHealthDataPoints(pageRecords);
                     appendRecords(parsed);
                     setFetchProgress(
                         latestDate
@@ -89,7 +70,6 @@ export function useFitbitData(): FitbitDataState {
                     await fetchAllSleepRecords(token, onPageData, abortController.signal);
                 }
 
-                // Phase 3: Final status
                 if (newRawRecords.length > 0) {
                     setFetchProgress(
                         `Done: ${rawRecordsRef.current.length} total records (${newRawRecords.length} new)`
@@ -109,15 +89,14 @@ export function useFitbitData(): FitbitDataState {
                 setFetching(false);
                 fetchAbortRef.current = null;
 
-                // Persist any newly fetched records to cache
                 if (newRawRecords.length > 0) {
-                    putRecords(userId, newRawRecords).catch((err) =>
-                        console.warn("[sleepCache] Failed to write new records:", err)
+                    putRecords(userId, newRawRecords).catch((err: unknown) =>
+                        console.warn("[googlehealthCache] Failed to write new records:", err)
                     );
                 }
             }
         },
-        [setRecords, appendRecords]
+        [appendRecords, setRecords]
     );
 
     const stopFetch = useCallback(() => {
@@ -131,7 +110,7 @@ export function useFitbitData(): FitbitDataState {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `fitbit-sleep-export-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `googlehealth-sleep-export-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
     }, [records]);

@@ -1,20 +1,20 @@
-const BASE_URL = "https://api.fitbit.com";
+const BASE_URL = "https://health.googleapis.com/v4";
 
-export class FitbitApiError extends Error {
+export class HealthApiError extends Error {
     constructor(
         public status: number,
         message: string
     ) {
         super(message);
-        this.name = "FitbitApiError";
+        this.name = "HealthApiError";
     }
 }
 
 /**
- * Typed fetch wrapper for the Fitbit API.
+ * Typed fetch wrapper for the Google Health API.
  * Adds Authorization header and handles errors.
  */
-export async function fitbitFetch<T>(path: string, token: string, signal?: AbortSignal): Promise<T> {
+export async function healthFetch<T>(path: string, token: string, signal?: AbortSignal): Promise<T> {
     const response = await fetch(`${BASE_URL}${path}`, {
         headers: {
             Authorization: `Bearer ${token}`,
@@ -25,7 +25,7 @@ export async function fitbitFetch<T>(path: string, token: string, signal?: Abort
 
     if (!response.ok) {
         const text = await response.text();
-        throw new FitbitApiError(response.status, `Fitbit API error ${response.status}: ${text}`);
+        throw new HealthApiError(response.status, `Google Health API error ${response.status}: ${text}`);
     }
 
     return response.json() as Promise<T>;

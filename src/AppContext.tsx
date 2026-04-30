@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { usePersistedState } from "./usePersistedState";
 import { useAuth } from "./auth/useAuth";
-import { useFitbitData } from "./data/useFitbitData";
+import { useGoogleHealthData } from "./data/useGoogleHealthData";
 import { analyzeWithAlgorithm, DEFAULT_ALGORITHM_ID } from "./models/circadian";
 import { interpolateOverlay } from "./models/overlayPath";
 import type { OverlayControlPoint } from "./models/overlayPath";
@@ -18,7 +18,7 @@ const ACTOGRAM_MARGINS = 50;
 // ── Provider ────────────────────────────────────────────────────
 
 export function AppProvider({ children }: { children: ReactNode }) {
-    const data = useFitbitData();
+    const data = useGoogleHealthData();
     const auth = useAuth();
 
     // Visualization settings (persisted to localStorage)
@@ -177,7 +177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (auth.token && auth.userId) data.startFetch(auth.token, auth.userId);
     }, [auth.token, auth.userId, data.startFetch]);
 
-    const hasClientId = !!import.meta.env.VITE_FITBIT_CLIENT_ID;
+    const hasClientId = !!import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_ID;
 
     // ── Context value ───────────────────────────────────────────
 

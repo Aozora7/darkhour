@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { FitbitDataState } from "./data/useFitbitData";
+import type { GoogleHealthDataState } from "./data/useGoogleHealthData";
 import type { CircadianAnalysis } from "./models/circadian";
 import type { ColorMode } from "./components/Actogram/useActogramRenderer";
 import type { SleepRecord } from "./api/types";
@@ -18,7 +18,7 @@ export interface ScheduleEntry {
 
 export interface AppState {
     // Data
-    data: FitbitDataState;
+    data: GoogleHealthDataState;
     auth: {
         token: string | null;
         userId: string | null;

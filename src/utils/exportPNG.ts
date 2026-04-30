@@ -139,6 +139,6 @@ export function exportActogramPNG(stats: ExportStats, options?: { includePeriodo
     const dataUrl = out.toDataURL("image/png");
     const a = document.createElement("a");
     a.href = dataUrl;
-    a.download = `fitbit-actogram-${new Date().toISOString().slice(0, 10)}.png`;
+    a.download = `actogram-${new Date().toISOString().slice(0, 10)}.png`;
     a.click();
 }
