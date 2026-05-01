@@ -6,7 +6,9 @@ https://25h.aozora.one/
 
 A client-side React application that visualizes Google Health sleep data in a way that's helpful for people with non-24-hour sleep-wake disorder (N24). The main feature is an actogram with sleep stage data (when available), and an overlay that displays estimated circadian night on each day, calculated based on the entire visible data set.
 
-Inspired by existing sleep visualization tools, but written completely from scratch due to different objectives and implementation.
+In many aspects inspired by [fitbit-sleep-vis](https://github.com/carrotflakes/fitbit-sleep-vis) as I've been using it for years, but this project is written completely from scratch due to vastly different objectives and implementation besides fetching.
+
+This repository is a reimplementation of [fitbit-n24](https://github.com/Aozora7/fitbit-n24) for Google Health API as Fitbit API will be deprecated this year.
 
 ## Features
 
@@ -61,6 +63,7 @@ To fetch data directly from the Google Health API:
 2. Copy `.env.example` to `.env` and fill in your client ID:
     ```
     VITE_GOOGLE_HEALTH_CLIENT_ID=your_client_id_here
+    VITE_GOOGLE_HEALTH_CLIENT_SECRET=your_client_secret_here
     ```
 3. Start the dev server and click "Sign in"
 
@@ -75,8 +78,8 @@ The app starts empty. You can:
 
 Supported import formats:
 
-- App export format: `{ "sleep": [...] }`
-- Flat array of records: `[ { dateOfSleep, startTime, ... }, ... ]`
+- Google Health sleep dataPoints
+- Fitbit API v1.2 response
 - Previously exported data from this app
 
 ## Project structure
