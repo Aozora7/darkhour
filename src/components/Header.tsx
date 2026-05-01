@@ -76,32 +76,29 @@ const Privacy = ({ onClose }: { onClose: () => void }) => (
             developer. When you sign in with Google, the data goes directly from Google to your browser. Nothing is
             stored anywhere except on your own device.
         </p>
-        <details className="text-gray-400">
-            <summary className="cursor-pointer text-gray-300 hover:text-gray-100">Technical details</summary>
-            <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs">
-                <li>Static client-side SPA with no backend server, database, or analytics.</li>
-                <li>
-                    OAuth 2.0 PKCE flow — access and refresh tokens stored in{" "}
-                    <code className="text-gray-300">localStorage</code>, cleared when you sign out.
-                </li>
-                <li>
-                    All API requests go directly from your browser to{" "}
-                    <code className="text-gray-300">health.googleapis.com</code>. No proxy involved.
-                </li>
-                <li>No cookies, tracking pixels, or third-party scripts.</li>
-                <li>
-                    Revoke access anytime in{" "}
-                    <a
-                        href="https://myaccount.google.com/permissions"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:underline"
-                    >
-                        your Google Account permissions
-                    </a>
-                    .
-                </li>
-            </ul>
-        </details>
+        <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs">
+            <li>Static client-side SPA with no backend server, database, or analytics.</li>
+            <li>
+                OAuth 2.0 PKCE flow — access and refresh tokens stored in{" "}
+                <code className="text-gray-300">localStorage</code>, cleared when you sign out.
+            </li>
+            <li>
+                All API requests go directly from your browser to{" "}
+                <code className="text-gray-300">health.googleapis.com</code>
+            </li>
+            <li>No cookies, tracking pixels, or third-party scripts.</li>
+            <li>
+                Revoke access anytime in{" "}
+                <a
+                    href="https://myaccount.google.com/permissions"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:underline"
+                >
+                    your Google Account permissions
+                </a>
+                .
+            </li>
+        </ul>
     </div>
 );
