@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Privacy Policy - Dark Hour</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                line-height: 1.6;
+                max-width: 900px;
+                margin: 0 auto;
+                padding: 20px;
+                color: #d1d5db;
+                background-color: #1f2937;
+            }
+            h1 {
+                color: #f3f4f6;
+                border-bottom: 2px solid #60a5fa;
+                padding-bottom: 10px;
+            }
+            h2 {
+                color: #93c5fd;
+                margin-top: 30px;
+            }
+            ul {
+                list-style-type: disc;
+                margin-left: 20px;
+            }
+            li {
+                margin: 10px 0;
+            }
+            code {
+                background-color: #374151;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: "Courier New", monospace;
+                color: #d1d5db;
+            }
+            a {
+                color: #60a5fa;
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Privacy Policy</h1>
+
+        <p>
+            This app runs entirely in your browser. Your sleep data is never sent to any server controlled by the app
+            developer. When you sign in with Google, the data goes directly from Google to your browser. Nothing is
+            stored anywhere except on your own device.
+        </p>
+
+        <h2>How Your Data is Protected</h2>
+
+        <ul>
+            <li><strong>Static client-side SPA</strong> with no backend server, database, or analytics.</li>
+            <li>
+                <strong>OAuth 2.0 PKCE flow</strong> — access and refresh tokens stored in <code>localStorage</code>,
+                cleared when you sign out.
+            </li>
+            <li>
+                <strong>All API requests</strong> go directly from your browser to
+                <code>health.googleapis.com</code>
+            </li>
+            <li><strong>No cookies, tracking pixels, or third-party scripts.</strong></li>
+            <li>
+                <strong>Revoke access anytime</strong> in
+                <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">
+                    your Google Account permissions</a
+                >.
+            </li>
+        </ul>
+    </body>
+</html>

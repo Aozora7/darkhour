@@ -29,7 +29,7 @@ export default function Header() {
                     </svg>
                 </a>
                 <a
-                    href="/privacy.md"
+                    href="/privacy.html"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-gray-500 hover:text-gray-300"
