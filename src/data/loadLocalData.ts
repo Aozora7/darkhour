@@ -1,4 +1,7 @@
-import type { RawSleepRecordV12, SleepRecord } from "../api/types";
+import type { SleepRecord } from "../api/types";
+import type { RawSleepRecordV12 } from "../api/fitbitTypes";
+import type { GoogleHealthSleepDataPoint, GoogleHealthSleepPage } from "../api/googlehealth/types";
+import { parseGoogleHealthDataPoint, parseGoogleHealthDataPoints } from "../api/googlehealth/parse";
 import { calculateSleepScore } from "../models/calculateSleepScore";
 
 function parseV12Record(raw: RawSleepRecordV12): SleepRecord {
@@ -13,7 +16,6 @@ function parseV12Record(raw: RawSleepRecordV12): SleepRecord {
         minutesAsleep: raw.minutesAsleep,
         minutesAwake: raw.minutesAwake,
         isMainSleep: raw.isMainSleep,
-        sleepScore: calculateSleepScore(raw),
     };
 
     if (raw.levels) {
@@ -32,6 +34,8 @@ function parseV12Record(raw: RawSleepRecordV12): SleepRecord {
             record.stageData = raw.levels.data;
         }
     }
+
+    record.sleepScore = calculateSleepScore(record);
 
     return record;
 }
@@ -69,6 +73,9 @@ function parseAnyRecord(raw: Record<string, unknown>): SleepRecord {
     if ("levels" in raw || "type" in raw) {
         return parseV12Record(raw as unknown as RawSleepRecordV12);
     }
+    if ("name" in raw && "sleep" in raw) {
+        return parseGoogleHealthDataPoint(raw as unknown as GoogleHealthSleepDataPoint);
+    }
     throw new Error("Unrecognized sleep record format: expected v1.2 (stages) data");
 }
 
@@ -81,30 +88,44 @@ function parseAnyRecord(raw: Record<string, unknown>): SleepRecord {
  * Pure function — no browser APIs required.
  */
 export function parseSleepData(data: unknown): SleepRecord[] {
-    let rawRecords: Record<string, unknown>[];
+    let allRecords: SleepRecord[] = [];
 
     if (Array.isArray(data)) {
         if (data.length === 0) return [];
 
-        // Check if it's an array of pages or an array of individual records
         const first = data[0] as Record<string, unknown>;
-        if ("sleep" in first && Array.isArray(first.sleep)) {
-            // Array of pages: [ { sleep: [...] }, ... ]
-            rawRecords = data.flatMap(
+        if ("dataPoints" in first) {
+            // Array of Google Health pages
+            const dataPoints = data.flatMap((page) => ((page as unknown as GoogleHealthSleepPage).dataPoints) ?? []);
+            allRecords = parseGoogleHealthDataPoints(dataPoints as GoogleHealthSleepDataPoint[]);
+        } else if ("sleep" in first && !Array.isArray(first.sleep) && typeof first.sleep === "object" && "interval" in (first.sleep as Record<string, unknown>)) {
+            // Array of GoogleHealthSleepDataPoint
+            allRecords = parseGoogleHealthDataPoints(data as GoogleHealthSleepDataPoint[]);
+        } else if ("sleep" in first && Array.isArray(first.sleep)) {
+            // Array of Fitbit pages
+            const rawRecords = data.flatMap(
                 (page: Record<string, unknown>) => (page.sleep as Record<string, unknown>[]) ?? []
             );
+            allRecords = rawRecords.map(parseAnyRecord);
         } else {
             // Flat array of records
-            rawRecords = data;
+            allRecords = data.map((x) => parseAnyRecord(x as Record<string, unknown>));
         }
-    } else if (typeof data === "object" && data !== null && "sleep" in (data as Record<string, unknown>)) {
-        // Single page: { sleep: [...], pagination: {...} }
-        rawRecords = (data as Record<string, unknown>).sleep as Record<string, unknown>[];
+    } else if (typeof data === "object" && data !== null) {
+        const obj = data as Record<string, unknown>;
+        if ("dataPoints" in obj) {
+            // Single Google Health page
+            allRecords = parseGoogleHealthDataPoints((obj.dataPoints as GoogleHealthSleepDataPoint[]) ?? []);
+        } else if ("sleep" in obj && Array.isArray(obj.sleep)) {
+            // Single Fitbit page
+            const rawRecords = obj.sleep as Record<string, unknown>[];
+            allRecords = rawRecords.map(parseAnyRecord);
+        } else {
+            throw new Error("Unrecognized sleep data format");
+        }
     } else {
         throw new Error("Unrecognized sleep data format");
     }
-
-    const allRecords = rawRecords.map(parseAnyRecord);
 
     // Sort by start time ascending (oldest first)
     allRecords.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());

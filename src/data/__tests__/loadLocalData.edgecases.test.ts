@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseSleepData } from "../loadLocalData";
-import type { RawSleepRecordV12 } from "../../api/types";
+import type { RawSleepRecordV12 } from "../../api/fitbitTypes";
 
 function makeV12Raw(overrides: Record<string, unknown> = {}): RawSleepRecordV12 {
     return {

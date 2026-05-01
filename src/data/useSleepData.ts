@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import type { SleepRecord, RawSleepRecordV12 } from "../api/types";
+import type { SleepRecord } from "../api/types";
+import type { RawSleepRecordV12 } from "../api/fitbitTypes";
 import { calculateSleepScore } from "../models/calculateSleepScore";
 import { loadLocalData } from "./loadLocalData";
 
@@ -28,7 +29,6 @@ function parseV12(raw: RawSleepRecordV12): SleepRecord {
         minutesAsleep: raw.minutesAsleep,
         minutesAwake: raw.minutesAwake,
         isMainSleep: raw.isMainSleep,
-        sleepScore: calculateSleepScore(raw),
     };
 
     if (raw.levels) {
@@ -57,6 +57,9 @@ function sortAndDedup(records: SleepRecord[]): SleepRecord[] {
     const seen = new Set<number>();
     return records.filter((r) => {
         if (seen.has(r.logId)) return false;
+        if (!r.sleepScore) {
+            r.sleepScore = calculateSleepScore(r);
+        }
         seen.add(r.logId);
         return true;
     });

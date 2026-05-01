@@ -57,36 +57,39 @@ function deriveLogId(dataPoint: GoogleHealthSleepDataPoint, startTime: Date): nu
 
 export function parseGoogleHealthDataPoints(dataPoints: GoogleHealthSleepDataPoint[]): SleepRecord[] {
     return dataPoints.map((dp) => {
-        const start = dp.sleep?.interval?.startTime ? new Date(dp.sleep.interval.startTime) : new Date(0);
-        const end = dp.sleep?.interval?.endTime ? new Date(dp.sleep.interval.endTime) : new Date(0);
-        const durationMs = Math.max(0, end.getTime() - start.getTime());
-
-        const minutesAsleep = Number.parseInt(dp.sleep?.summary?.minutesAsleep ?? "0", 10) || 0;
-        const minutesAwake = Number.parseInt(dp.sleep?.summary?.minutesAwake ?? "0", 10) || 0;
-
-        const record: SleepRecord = {
-            logId: deriveLogId(dp, start),
-            dateOfSleep: formatLocalDate(start),
-            startTime: start,
-            endTime: end,
-            durationMs,
-            durationHours: durationMs / 3_600_000,
-            // Google Health doesn't provide an efficiency score; approximate.
-            efficiency:
-                durationMs > 0
-                    ? Math.max(0, Math.min(100, Math.round((minutesAsleep * 60_000 * 100) / durationMs)))
-                    : 0,
-            minutesAsleep,
-            minutesAwake,
-            isMainSleep: dp.sleep?.isMainSleep ?? true,
-            sleepScore: 0,
-        };
-
-        const stages = buildStagesSummary(dp);
-        if (stages) record.stages = stages;
-
-        record.stageData = buildStageData(dp.sleep?.stages);
-
-        return record;
+        return parseGoogleHealthDataPoint(dp);
     });
 }
+export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): SleepRecord {
+    const start = dp.sleep?.interval?.startTime ? new Date(dp.sleep.interval.startTime) : new Date(0);
+    const end = dp.sleep?.interval?.endTime ? new Date(dp.sleep.interval.endTime) : new Date(0);
+    const durationMs = Math.max(0, end.getTime() - start.getTime());
+
+    const minutesAsleep = Number.parseInt(dp.sleep?.summary?.minutesAsleep ?? "0", 10) || 0;
+    const minutesAwake = Number.parseInt(dp.sleep?.summary?.minutesAwake ?? "0", 10) || 0;
+
+    const record: SleepRecord = {
+        logId: deriveLogId(dp, start),
+        dateOfSleep: formatLocalDate(start),
+        startTime: start,
+        endTime: end,
+        durationMs,
+        durationHours: durationMs / 3600000,
+        // Google Health doesn't provide an efficiency score; approximate.
+        efficiency: durationMs > 0
+            ? Math.max(0, Math.min(100, Math.round((minutesAsleep * 60000 * 100) / durationMs)))
+            : 0,
+        minutesAsleep,
+        minutesAwake,
+        isMainSleep: dp.sleep?.isMainSleep ?? true,
+        sleepScore: 0,
+    };
+
+    const stages = buildStagesSummary(dp);
+    if (stages) record.stages = stages;
+
+    record.stageData = buildStageData(dp.sleep?.stages);
+
+    return record;
+}
+
