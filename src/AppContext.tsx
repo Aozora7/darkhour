@@ -27,7 +27,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [rowHeight, setRowHeight] = usePersistedState("viz.rowHeight", 5);
     const [showCircadian, setShowCircadian] = usePersistedState("viz.showCircadian", true);
     const [showPeriodogram, setShowPeriodogram] = usePersistedState("viz.showPeriodogram", true);
-    const [showPhaseChart, setShowPhaseChart] = usePersistedState("viz.showPhaseChart", false);
     const [colorMode, setColorMode] = usePersistedState<ColorMode>("viz.colorMode", "stages");
     const [tauHours, setTauHours] = usePersistedState("viz.tauHours", 24);
     const [sortDirection, setSortDirection] = usePersistedState<"newest" | "oldest">("viz.sortDirection", "newest");
@@ -207,8 +206,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setShowCircadian,
             showPeriodogram,
             setShowPeriodogram,
-            showPhaseChart,
-            setShowPhaseChart,
             colorMode,
             setColorMode,
             tauHours,
@@ -256,7 +253,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             showDateLabels,
             showCircadian,
             showPeriodogram,
-            showPhaseChart,
             colorMode,
             tauHours,
             sortDirection,

@@ -14,7 +14,6 @@ Inspired by existing sleep visualization tools, but written completely from scra
 
 - Canvas actogram with sleep stage coloring, one row per day
 - Periodogram for circadian frequency analysis
-- Phase advance chart
 - Optional double-plot mode for patterns crossing row boundaries
 - Adjustable row height
 - Adjustable row width to match the data's circadian period, allowing sleep records to line up

@@ -33,7 +33,7 @@ export function buildPeriodogramAnchors(records: SleepRecord[]): PeriodogramAnch
             const midpointMs = (r.startTime.getTime() + r.endTime.getTime()) / 2;
             const midnightMs = new Date(r.dateOfSleep + "T00:00:00").getTime();
             const midpointHour = (midpointMs - midnightMs) / 3_600_000;
-            const weight = r.sleepScore * Math.min(1, r.durationHours / 7);
+            const weight = (r.sleepScore || 0) * Math.min(1, r.durationHours / 7);
 
             return { dayNumber, midpointHour, weight };
         });

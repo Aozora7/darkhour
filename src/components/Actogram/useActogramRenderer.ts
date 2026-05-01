@@ -153,7 +153,7 @@ export function useActogramRenderer(
                         const s = block.record.stages;
                         info.stages = `D:${s.deep} L:${s.light} R:${s.rem} W:${s.wake}min`;
                     }
-                    info.quality = (block.record.sleepScore * 100).toFixed(0) + "%";
+                    info.quality = (block.record.sleepScore || 0 * 100).toFixed(0) + "%";
                     return info;
                 }
             }
@@ -557,7 +557,7 @@ export function useActogramRenderer(
                 const blockPixelWidth = xScale(bEnd) - xScale(bStart);
 
                 if (cfg.colorMode === "quality") {
-                    ctx.fillStyle = qualityColor(block.record.sleepScore);
+                    ctx.fillStyle = qualityColor(block.record.sleepScore || 0);
                     ctx.fillRect(xScale(bStart), y, Math.max(blockPixelWidth, 1), cfg.rowHeight - 0.5);
                 } else if (block.record.stageData && blockPixelWidth > 5) {
                     drawStageBlock(

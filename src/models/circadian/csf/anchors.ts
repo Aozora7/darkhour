@@ -2,7 +2,7 @@ import type { CSFAnchor } from "./types";
 import type { SleepRecord } from "../../../api/types";
 
 export function computeAnchorWeight(record: SleepRecord): number | null {
-    const quality = record.sleepScore;
+    const quality = record.sleepScore || 0;
     const dur = record.durationHours;
 
     const durFactor = Math.min(1, Math.max(0, (dur - 4) / 3));

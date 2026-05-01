@@ -110,7 +110,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `googlehealth-sleep-export-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `darkhour-export-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
     }, [records]);

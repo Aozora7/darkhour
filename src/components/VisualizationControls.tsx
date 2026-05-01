@@ -114,8 +114,6 @@ export default function VisualizationControls() {
         setShowCircadian,
         showPeriodogram,
         setShowPeriodogram,
-        showPhaseChart,
-        setShowPhaseChart,
         showSchedule,
         setShowSchedule,
         showScheduleEditor,
@@ -175,7 +173,6 @@ export default function VisualizationControls() {
                             </label>
                         )}
                         <Toggle checked={showPeriodogram} onChange={setShowPeriodogram} label="Periodogram" />
-                        <Toggle checked={showPhaseChart} onChange={setShowPhaseChart} label="Phase chart" />
                         <Toggle checked={showSchedule} onChange={setShowSchedule} label="Schedule overlay" />
                         {showSchedule && (
                             <Toggle
