@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef } from "react";
-import { useSleepData } from "./useSleepData";
+import type { SleepRecord } from "../api/types";
+import { calculateSleepScore } from "../models/calculateSleepScore";
+import { loadLocalData } from "./loadLocalData";
 import { fetchAllSleepRecords, fetchNewSleepRecords } from "../api/googlehealth/api";
 import { getCachedRecords, getLatestDateOfSleep, putRecords, clearUserCache } from "../api/googlehealth/cache";
 import type { GoogleHealthSleepDataPoint } from "../api/googlehealth/types";
 import { parseGoogleHealthDataPoints } from "../api/googlehealth/parse";
-import type { SleepRecord } from "../api/types";
 
 export interface GoogleHealthDataState {
     records: SleepRecord[];
@@ -20,13 +21,66 @@ export interface GoogleHealthDataState {
     reset: () => void;
 }
 
+/** Sort records oldest-first and deduplicate by logId */
+function sortAndDedup(records: SleepRecord[]): SleepRecord[] {
+    records.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    const seen = new Set<number>();
+    return records.filter((r) => {
+        if (seen.has(r.logId)) return false;
+        if (!r.sleepScore) {
+            r.sleepScore = calculateSleepScore(r);
+        }
+        seen.add(r.logId);
+        return true;
+    });
+}
+
 export function useGoogleHealthData(): GoogleHealthDataState {
-    const { records, loading, error, setRecords, appendRecords, importFromFiles } = useSleepData();
+    const [records, setRecordsRaw] = useState<SleepRecord[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [fetching, setFetching] = useState(false);
     const [fetchProgress, setFetchProgress] = useState("");
 
     const rawRecordsRef = useRef<GoogleHealthSleepDataPoint[]>([]);
     const fetchAbortRef = useRef<AbortController | null>(null);
+
+    const setRecords = useCallback((recs: SleepRecord[]) => {
+        setRecordsRaw(sortAndDedup(recs));
+        setError(null);
+    }, []);
+
+    const appendRecords = useCallback((newRecords: SleepRecord[]) => {
+        setRecordsRaw((prev) => sortAndDedup([...prev, ...newRecords]));
+        setError(null);
+    }, []);
+
+    const importFromFiles = useCallback(async (files: File[]) => {
+        if (files.length === 0) return;
+
+        try {
+            setLoading(true);
+            const allRecords: SleepRecord[] = [];
+
+            for (const file of files) {
+                if (!file) continue;
+                const blobUrl = URL.createObjectURL(file);
+                try {
+                    const recs = await loadLocalData(blobUrl);
+                    allRecords.push(...recs);
+                } finally {
+                    URL.revokeObjectURL(blobUrl);
+                }
+            }
+
+            setRecordsRaw(sortAndDedup(allRecords));
+            setError(null);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Import failed");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     const startFetch = useCallback(
         async (token: string, userId: string) => {
