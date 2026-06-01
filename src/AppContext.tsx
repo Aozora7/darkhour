@@ -53,11 +53,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Auto-fetch after OAuth login (token appears and no data loaded yet)
     const autoFetchedRef = useRef(false);
     useEffect(() => {
-        if (auth.token && auth.userId && data.records.length === 0 && !data.fetching && !autoFetchedRef.current) {
+        if (
+            !auth.loading &&
+            auth.token &&
+            auth.userId &&
+            data.records.length === 0 &&
+            !data.fetching &&
+            !autoFetchedRef.current
+        ) {
             autoFetchedRef.current = true;
             data.startFetch(auth.token, auth.userId);
         }
-    }, [auth.token, auth.userId, data.records.length, data.fetching, data.startFetch]);
+    }, [auth.loading, auth.token, auth.userId, data.records.length, data.fetching, data.startFetch]);
 
     // Reset auto-fetch guard when token changes (allows retry after token refresh)
     useEffect(() => {

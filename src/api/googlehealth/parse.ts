@@ -76,9 +76,8 @@ export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): Slee
         durationMs,
         durationHours: durationMs / 3600000,
         // Google Health doesn't provide an efficiency score; approximate.
-        efficiency: durationMs > 0
-            ? Math.max(0, Math.min(100, Math.round((minutesAsleep * 60000 * 100) / durationMs)))
-            : 0,
+        efficiency:
+            durationMs > 0 ? Math.max(0, Math.min(100, Math.round((minutesAsleep * 60000 * 100) / durationMs))) : 0,
         minutesAsleep,
         minutesAwake,
         isMainSleep: dp.sleep?.isMainSleep ?? true,
@@ -92,4 +91,3 @@ export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): Slee
 
     return record;
 }
-

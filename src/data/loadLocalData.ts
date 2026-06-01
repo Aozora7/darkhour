@@ -96,9 +96,14 @@ export function parseSleepData(data: unknown): SleepRecord[] {
         const first = data[0] as Record<string, unknown>;
         if ("dataPoints" in first) {
             // Array of Google Health pages
-            const dataPoints = data.flatMap((page) => ((page as unknown as GoogleHealthSleepPage).dataPoints) ?? []);
+            const dataPoints = data.flatMap((page) => (page as unknown as GoogleHealthSleepPage).dataPoints ?? []);
             allRecords = parseGoogleHealthDataPoints(dataPoints as GoogleHealthSleepDataPoint[]);
-        } else if ("sleep" in first && !Array.isArray(first.sleep) && typeof first.sleep === "object" && "interval" in (first.sleep as Record<string, unknown>)) {
+        } else if (
+            "sleep" in first &&
+            !Array.isArray(first.sleep) &&
+            typeof first.sleep === "object" &&
+            "interval" in (first.sleep as Record<string, unknown>)
+        ) {
             // Array of GoogleHealthSleepDataPoint
             allRecords = parseGoogleHealthDataPoints(data as GoogleHealthSleepDataPoint[]);
         } else if ("sleep" in first && Array.isArray(first.sleep)) {
