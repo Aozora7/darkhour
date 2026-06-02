@@ -54,11 +54,20 @@ export const AuthContext = createContext<AuthState>({
     signOut: () => {},
 });
 
+/** Determine whether stored credentials require an immediate silent refresh. */
+export function needsRefreshOnMount(stored: { refreshToken: string | null; expiryMs: number }): boolean {
+    return !!(stored.refreshToken && Date.now() >= stored.expiryMs - REFRESH_BEFORE_MS);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = readStorage();
-    const [token, setToken] = useState<string | null>(stored.token);
-    const [userId, setUserId] = useState<string | null>(stored.userId);
-    const [loading, setLoading] = useState(false);
+    const shouldRefresh = needsRefreshOnMount(stored);
+    // Don't expose stale credentials — wait for refresh to complete before
+    // consumers see a token.  This prevents auto-fetch from firing with an
+    // expired access token that hasn't been refreshed yet.
+    const [token, setToken] = useState<string | null>(shouldRefresh ? null : stored.token);
+    const [userId, setUserId] = useState<string | null>(shouldRefresh ? null : stored.userId);
+    const [loading, setLoading] = useState(shouldRefresh);
     const [error, setError] = useState<string | null>(null);
     const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
