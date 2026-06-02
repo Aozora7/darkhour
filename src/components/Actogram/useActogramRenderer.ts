@@ -153,7 +153,7 @@ export function useActogramRenderer(
                         const s = block.record.stages;
                         info.stages = `D:${s.deep} L:${s.light} R:${s.rem} W:${s.wake}min`;
                     }
-                    info.quality = (block.record.sleepScore || 0 * 100).toFixed(0) + "%";
+                    info.quality = ((block.record.sleepScore || 0) * 100).toFixed(0) + "%";
                     return info;
                 }
             }
