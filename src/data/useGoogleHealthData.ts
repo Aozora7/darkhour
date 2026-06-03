@@ -14,6 +14,7 @@ export interface GoogleHealthDataState {
     error: string | null;
     fetching: boolean;
     fetchProgress: string;
+    accountNotLinked: boolean;
     startFetch: (token: string, userId: string) => void;
     stopFetch: () => void;
     importFromFiles: (files: File[]) => Promise<void>;
@@ -43,6 +44,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
     const [error, setError] = useState<string | null>(null);
     const [fetching, setFetching] = useState(false);
     const [fetchProgress, setFetchProgress] = useState("");
+    const [accountNotLinked, setAccountNotLinked] = useState(false);
 
     const rawRecordsRef = useRef<GoogleHealthSleepDataPoint[]>([]);
     const fetchAbortRef = useRef<AbortController | null>(null);
@@ -50,6 +52,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
     const setRecords = useCallback((recs: SleepRecord[]) => {
         setRecordsRaw(sortAndDedup(recs));
         setError(null);
+        setAccountNotLinked(false);
     }, []);
 
     const appendRecords = useCallback((newRecords: SleepRecord[]) => {
@@ -139,7 +142,13 @@ export function useGoogleHealthData(): GoogleHealthDataState {
                 if (err instanceof DOMException && err.name === "AbortError") {
                     setFetchProgress(`Stopped: ${rawRecordsRef.current.length} records kept`);
                 } else {
-                    setFetchProgress(`Error: ${err instanceof Error ? err.message : "Fetch failed"}`);
+                    const message = err instanceof Error ? err.message : "Fetch failed";
+                    if (message.includes("ACCOUNT_NOT_LINKED")) {
+                        setAccountNotLinked(true);
+                        setFetchProgress("");
+                    } else {
+                        setFetchProgress(`Error: ${message}`);
+                    }
                 }
             } finally {
                 setFetching(false);
@@ -177,6 +186,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
             rawRecordsRef.current = [];
             setRecords([]);
             setFetchProgress("");
+            setAccountNotLinked(false);
         },
         [setRecords]
     );
@@ -191,6 +201,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
         rawRecordsRef.current = [];
         setRecords([]);
         setFetchProgress("");
+        setAccountNotLinked(false);
     }, [setRecords]);
 
     return {
@@ -199,6 +210,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
         error,
         fetching,
         fetchProgress,
+        accountNotLinked,
         startFetch,
         stopFetch,
         importFromFiles,
