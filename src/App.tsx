@@ -7,6 +7,7 @@ import Actogram from "./components/Actogram/Actogram";
 import Periodogram from "./components/Periodogram";
 import DateRangeSlider from "./components/DateRangeSlider";
 import Legend from "./components/Legend";
+import EmptyState from "./components/EmptyState";
 
 export default function App() {
     const { data, showScheduleEditor } = useAppContext();
@@ -25,7 +26,7 @@ export default function App() {
             <DataToolbar />
             <VisualizationControls />
             {showScheduleEditor && <ScheduleEditor />}
-            {data.records.length > 0 && (
+            {data.records.length > 0 ? (
                 <>
                     <div className="mx-auto max-w-5xl">
                         <DateRangeSlider />
@@ -35,6 +36,8 @@ export default function App() {
 
                     <Legend />
                 </>
+            ) : (
+                !data.fetching && <EmptyState />
             )}
         </div>
     );

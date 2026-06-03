@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from "react";
 import type { SleepRecord } from "../api/types";
 import { calculateSleepScore } from "../models/calculateSleepScore";
-import { loadLocalData } from "./loadLocalData";
+import { loadLocalData, parseSleepData } from "./loadLocalData";
+import demoData from "./demo-data.json";
 import { fetchAllSleepRecords, fetchNewSleepRecords } from "../api/googlehealth/api";
 import { getCachedRecords, getLatestDateOfSleep, putRecords, clearUserCache } from "../api/googlehealth/cache";
 import type { GoogleHealthSleepDataPoint } from "../api/googlehealth/types";
@@ -16,6 +17,7 @@ export interface GoogleHealthDataState {
     startFetch: (token: string, userId: string) => void;
     stopFetch: () => void;
     importFromFiles: (files: File[]) => Promise<void>;
+    loadDemoData: () => void;
     exportToFile: () => void;
     clearCache: (userId: string) => Promise<void>;
     reset: () => void;
@@ -179,6 +181,12 @@ export function useGoogleHealthData(): GoogleHealthDataState {
         [setRecords]
     );
 
+    const loadDemoData = useCallback(() => {
+        const parsed = parseSleepData(demoData);
+        setRecords(parsed);
+        setFetchProgress(`Demo data loaded (${parsed.length} records)`);
+    }, [setRecords]);
+
     const reset = useCallback(() => {
         rawRecordsRef.current = [];
         setRecords([]);
@@ -194,6 +202,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
         startFetch,
         stopFetch,
         importFromFiles,
+        loadDemoData,
         exportToFile,
         clearCache,
         reset,
