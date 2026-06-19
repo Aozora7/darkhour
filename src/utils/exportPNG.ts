@@ -66,7 +66,9 @@ export function exportActogramPNG(stats: ExportStats, options?: { includePeriodo
     ctx.fillStyle = TEXT_COLOR;
     ctx.font = "bold 16px system-ui, sans-serif";
     ctx.textBaseline = "top";
-    ctx.fillText("N24 Sleep Visualization", 16, y + 12);
+    ctx.fillText("Dark Hour", 16, y + 12);
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.fillText("25h.aozora.one", cssWidth - 100, y + 12);
 
     const driftMin = stats.drift * 60;
     const sign = driftMin >= 0 ? "+" : "";

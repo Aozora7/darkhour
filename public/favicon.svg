@@ -1,12 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Blue waxing crescent moon -->
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Dark Hour simplified eclipse dial icon</title>
+  <desc id="desc">A bold green crescent clock with thick hands and a purple circadian window contained inside a dark circular badge.</desc>
   <defs>
-    <mask id="crescent">
-      <rect width="100" height="100" fill="white"/>
-      <circle cx="35" cy="50" r="35" fill="black"/>
-    </mask>
+    <linearGradient id="moon" x1="104" y1="100" x2="326" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c8f34f"/>
+      <stop offset=".55" stop-color="#57ce55"/>
+      <stop offset="1" stop-color="#20a96b"/>
+    </linearGradient>
+    <clipPath id="badge">
+      <circle cx="256" cy="256" r="224"/>
+    </clipPath>
   </defs>
-  <g transform="rotate(20 50 50)">
-    <circle cx="55" cy="50" r="38" fill="#3b82f6" mask="url(#crescent)"/>
+
+  <!-- Everything is clipped to one launcher-scale circle. -->
+  <g clip-path="url(#badge)">
+    <circle cx="256" cy="256" r="224" fill="#111426"/>
+
+    <!-- A moon disk covered by one offset circle creates the eclipse crescent. -->
+    <circle cx="234" cy="264" r="172" fill="url(#moon)"/>
+    <circle cx="318" cy="218" r="172" fill="#111426"/>
+
+    <!-- A flat-ended observed-night band maps an actogram window onto the dial. -->
+    <path d="M372 139 A184 184 0 0 1 420 314"
+          fill="none"
+          stroke="#a855f7"
+          stroke-width="28"
+          stroke-linecap="butt"/>
+
+    <!-- Thick clock hands remain legible at small launcher sizes. -->
+    <path d="M256 256 L174 317"
+          fill="none"
+          stroke="#b794ff"
+          stroke-width="24"
+          stroke-linecap="round"/>
+    <path d="M256 256 L256 91"
+          fill="none"
+          stroke="#ffd54a"
+          stroke-width="18"
+          stroke-linecap="round"/>
+
+    <!-- One simple hub replaces the previous layered clock center. -->
+    <circle cx="256" cy="256" r="16" fill="#fff3a0"/>
   </g>
+
+  <circle cx="256" cy="256" r="216" fill="none" stroke="#242842" stroke-width="16"/>
 </svg>

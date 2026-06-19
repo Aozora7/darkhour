@@ -25,7 +25,7 @@ export interface ActogramConfig {
 
 const DEFAULT_CONFIG: ActogramConfig = {
     doublePlot: false,
-    rowHeight: 5,
+    rowHeight: 12,
     colorMode: "stages",
     tauHours: 24,
     leftMargin: 80,
