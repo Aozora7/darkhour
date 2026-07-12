@@ -140,11 +140,11 @@ export default function DataToolbar() {
                 </button>
             )}
 
-            {data.records.length > 0 && overlayControlPoints.length > 0 && (
+            {filteredRecords.length > 0 && overlayControlPoints.length > 0 && (
                 <button
                     onClick={() => {
                         const exportData = {
-                            sleep: data.records,
+                            sleep: filteredRecords,
                             overlay: manualOverlayDays,
                             controlPoints: overlayControlPoints,
                         };
