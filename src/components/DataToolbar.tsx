@@ -2,7 +2,18 @@ import { useRef, useCallback } from "react";
 import { useAppContext } from "../useAppContext";
 import type { OverlayControlPoint } from "../models/overlayPath";
 import { exportActogramPNG } from "../utils/exportPNG";
-import { RefreshCw, Square, LogIn, LogOut, Trash2, Upload, Download, Image, Construction } from "lucide-react";
+import {
+    RefreshCw,
+    Square,
+    LogIn,
+    LogOut,
+    Trash2,
+    Upload,
+    Download,
+    Image,
+    Construction,
+    ChevronDown,
+} from "lucide-react";
 
 export default function DataToolbar() {
     const {
@@ -14,12 +25,16 @@ export default function DataToolbar() {
         setOverlayControlPoints,
         manualOverlayDays,
         filteredRecords,
+        filterStart,
+        filterEnd,
+        totalDays,
         circadianAnalysis,
         daySpan,
         colorMode,
         showPeriodogram,
     } = useAppContext();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const hasActiveDateFilter = filterStart > 0 || filterEnd < totalDays;
 
     const handleFileChange = useCallback(
         async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,14 +122,44 @@ export default function DataToolbar() {
                 />
             </label>
 
-            {data.records.length > 0 && (
+            {data.records.length > 0 && !hasActiveDateFilter && (
                 <button
-                    onClick={data.exportToFile}
+                    onClick={() => data.exportToFile()}
                     className="inline-flex items-center gap-1.5 rounded bg-gray-700 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-600"
                 >
                     <Upload size={14} strokeWidth={3} />
                     Export
                 </button>
+            )}
+
+            {data.records.length > 0 && hasActiveDateFilter && (
+                <details className="relative">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded bg-gray-700 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-600 [&::-webkit-details-marker]:hidden">
+                        <Upload size={14} strokeWidth={3} />
+                        Export
+                        <ChevronDown size={14} strokeWidth={3} />
+                    </summary>
+                    <div className="absolute z-10 mt-1 min-w-max rounded bg-gray-700 py-1 shadow-lg ring-1 ring-black/20">
+                        <button
+                            onClick={(event) => {
+                                data.exportToFile();
+                                event.currentTarget.closest("details")?.removeAttribute("open");
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-gray-600"
+                        >
+                            Export all data
+                        </button>
+                        <button
+                            onClick={(event) => {
+                                data.exportToFile(filteredRecords);
+                                event.currentTarget.closest("details")?.removeAttribute("open");
+                            }}
+                            className="block w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-gray-600"
+                        >
+                            Export filtered data
+                        </button>
+                    </div>
+                </details>
             )}
 
             {data.records.length > 0 && (

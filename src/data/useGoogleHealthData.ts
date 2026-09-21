@@ -19,7 +19,7 @@ export interface GoogleHealthDataState {
     stopFetch: () => void;
     importFromFiles: (files: File[]) => Promise<void>;
     loadDemoData: () => void;
-    exportToFile: () => void;
+    exportToFile: (recordsToExport?: SleepRecord[]) => void;
     clearCache: (userId: string) => Promise<void>;
     reset: () => void;
 }
@@ -168,17 +168,24 @@ export function useGoogleHealthData(): GoogleHealthDataState {
         fetchAbortRef.current?.abort();
     }, []);
 
-    const exportToFile = useCallback(() => {
-        const exportData = rawRecordsRef.current.length > 0 ? { sleep: rawRecordsRef.current } : { sleep: records };
-        const json = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([json], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `darkhour-export-${new Date().toISOString().slice(0, 10)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }, [records]);
+    const exportToFile = useCallback(
+        (recordsToExport?: SleepRecord[]) => {
+            const exportData = recordsToExport
+                ? { sleep: recordsToExport }
+                : rawRecordsRef.current.length > 0
+                  ? { sleep: rawRecordsRef.current }
+                  : { sleep: records };
+            const json = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([json], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `darkhour-export-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        },
+        [records]
+    );
 
     const clearCache = useCallback(
         async (userId: string) => {
