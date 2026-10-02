@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computePeriodogram, buildPeriodogramAnchors, type PeriodogramAnchor } from "../periodogram";
 import type { SleepRecord } from "../../api/types";
+import { hostOffsetAt } from "../../utils/zonedTime";
 
 function makeAnchor(dayNumber: number, midpointHour: number, weight = 1): PeriodogramAnchor {
     return { dayNumber, midpointHour, weight };
@@ -15,6 +16,9 @@ function makeSleepRecord(overrides: Partial<SleepRecord> = {}): SleepRecord {
         dateOfSleep: "2024-03-15",
         startTime,
         endTime,
+        // Host-local timestamps: record the host offset at each record's own date.
+        startTimeOffsetMinutes: hostOffsetAt(startTime.getTime()),
+        endTimeOffsetMinutes: hostOffsetAt(endTime.getTime()),
         durationMs: 8 * 3_600_000,
         durationHours: 8,
         efficiency: 90,

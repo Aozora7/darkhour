@@ -1,17 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { buildActogramRows, buildTauRows } from "../actogramData";
 import type { SleepRecord } from "../../api/types";
+import { hostOffsetAt, toInstant, zonedDateStr, zonedDayStartMs } from "../../utils/zonedTime";
 
 function makeRecord(start: string, end: string, id = 1): SleepRecord {
     const startTime = new Date(start);
     const endTime = new Date(end);
     const durationMs = endTime.getTime() - startTime.getTime();
     const dateStr = start.slice(0, 10);
+    // Timestamps are built with `new Date(string)`, so they sit in the host's own
+    // zone — the offset to record is the host offset at that date.
+    const offset = hostOffsetAt(startTime.getTime());
     return {
         logId: id,
         dateOfSleep: dateStr,
         startTime,
         endTime,
+        startTimeOffsetMinutes: offset,
+        endTimeOffsetMinutes: hostOffsetAt(endTime.getTime()),
         durationMs,
         durationHours: durationMs / 3_600_000,
         efficiency: 90,
@@ -152,5 +158,84 @@ describe("buildTauRows", () => {
         for (let i = 1; i < rows.length; i++) {
             expect(rows[i]!.startMs!).toBeLessThan(rows[i - 1]!.startMs!);
         }
+    });
+});
+
+describe("recorded time zone is honoured, not the host zone", () => {
+    /** A record captured at UTC+8, expressed as an absolute instant. */
+    function utc8Record(wallStart: string, wallEnd: string, id: number): SleepRecord {
+        const startMs = toInstant(wallStart, 480).getTime();
+        const endMs = toInstant(wallEnd, 480).getTime();
+        return {
+            logId: id,
+            dateOfSleep: zonedDateStr(startMs, 480),
+            startTime: new Date(startMs),
+            endTime: new Date(endMs),
+            startTimeOffsetMinutes: 480,
+            endTimeOffsetMinutes: 480,
+            durationMs: endMs - startMs,
+            durationHours: (endMs - startMs) / 3_600_000,
+            efficiency: 90,
+            minutesAsleep: 420,
+            minutesAwake: 30,
+            isMainSleep: true,
+            sleepScore: 0.8,
+        };
+    }
+
+    it("places the block at the recorded wall-clock hour", () => {
+        const records = [utc8Record("2024-01-01 23:00:00", "2024-01-02 07:00:00", 1)];
+        const rows = buildActogramRows(records, 0, "oldest");
+
+        const jan1 = rows.find((r) => r.date === "2024-01-01")!;
+        const jan2 = rows.find((r) => r.date === "2024-01-02")!;
+        // 23:00 and 07:00 are the *recorded* local times, whatever the host zone is.
+        expect(jan1.blocks[0]!.startHour).toBeCloseTo(23, 6);
+        expect(jan1.blocks[0]!.endHour).toBeCloseTo(24, 6);
+        expect(jan2.blocks[0]!.startHour).toBeCloseTo(0, 6);
+        expect(jan2.blocks[0]!.endHour).toBeCloseTo(7, 6);
+    });
+
+    it("labels rows with the recorded calendar day", () => {
+        const records = [utc8Record("2024-01-01 23:00:00", "2024-01-02 07:00:00", 1)];
+        const rows = buildActogramRows(records, 0, "oldest");
+        expect(rows.map((r) => r.date)).toEqual(["2024-01-01", "2024-01-02"]);
+    });
+
+    it("keeps a travelling subject's blocks on the shared grid", () => {
+        // Same wall-clock routine before and after a 6 h flight eastward. On a
+        // single grid the second block appears shifted, which is truthful — what
+        // must not happen is a row/day reassignment or a gap in the date sequence.
+        const before = utc8Record("2024-01-01 23:00:00", "2024-01-02 07:00:00", 1);
+        const afterStart = toInstant("2024-01-02 23:00:00", 120).getTime();
+        const afterEnd = toInstant("2024-01-03 07:00:00", 120).getTime();
+        const after: SleepRecord = {
+            ...before,
+            logId: 2,
+            dateOfSleep: zonedDateStr(afterStart, 120),
+            startTime: new Date(afterStart),
+            endTime: new Date(afterEnd),
+            startTimeOffsetMinutes: 120,
+            endTimeOffsetMinutes: 120,
+        };
+
+        const rows = buildActogramRows([before, after], 0, "oldest");
+        // Rows are contiguous — no day is invented or skipped by the zone change.
+        expect(rows.map((r) => r.date)).toEqual(["2024-01-01", "2024-01-02", "2024-01-03"]);
+        // Every block stays inside its row's [0, 24) window.
+        for (const row of rows) {
+            for (const block of row.blocks) {
+                expect(block.startHour).toBeGreaterThanOrEqual(0);
+                expect(block.endHour).toBeLessThanOrEqual(24);
+            }
+        }
+    });
+
+    it("exposes absolute block bounds so stage rendering needs no zone guess", () => {
+        const records = [utc8Record("2024-01-01 23:00:00", "2024-01-02 07:00:00", 1)];
+        const rows = buildActogramRows(records, 0, "oldest");
+        const block = rows.find((r) => r.date === "2024-01-01")!.blocks[0]!;
+        expect(block.startMs).toBe(records[0]!.startTime.getTime());
+        expect(block.endMs).toBe(zonedDayStartMs("2024-01-02", 480));
     });
 });

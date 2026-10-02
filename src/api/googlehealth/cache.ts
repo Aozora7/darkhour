@@ -1,4 +1,5 @@
 import type { GoogleHealthSleepDataPoint } from "./types";
+import { browserOffsetMinutes, parseUtcOffset, toInstant, zonedDateStr } from "../../utils/zonedTime";
 
 interface CachedGoogleHealthRecord extends GoogleHealthSleepDataPoint {
     _userId?: string;
@@ -109,10 +110,13 @@ export async function putRecords(userId: string, records: GoogleHealthSleepDataP
             const store = tx.objectStore(STORE_NAME);
 
             for (const record of records) {
-                const startObj = record.sleep?.interval?.startTime
-                    ? new Date(record.sleep.interval.startTime)
-                    : new Date();
-                const dateOfSleep = startObj.toISOString().slice(0, 10);
+                // Index on the day the sleep was *recorded* in, not the UTC day, so
+                // the incremental-fetch watermark tracks the subject's own calendar.
+                const offset = parseUtcOffset(record.sleep?.interval?.startUtcOffset) ?? browserOffsetMinutes();
+                const startMs = record.sleep?.interval?.startTime
+                    ? toInstant(record.sleep.interval.startTime, offset).getTime()
+                    : Date.now();
+                const dateOfSleep = Number.isFinite(startMs) ? zonedDateStr(startMs, offset) : "";
                 store.put({ ...record, _userId: userId, dateOfSleep });
             }
 

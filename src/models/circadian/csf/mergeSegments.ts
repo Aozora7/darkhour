@@ -1,9 +1,26 @@
 import type { CircadianDay } from "../types";
 import type { CSFAnalysis, SegmentResult } from "./types";
+import {
+    MS_PER_DAY,
+    browserOffsetMinutes,
+    type OffsetMinutes,
+    zonedDateStr,
+    zonedDayStartMs,
+} from "../../../utils/zonedTime";
 
 export const ALGORITHM_ID = "csf-v1";
 
-export function mergeSegmentResults(segments: SegmentResult[], globalFirstDateMs: number): CSFAnalysis {
+/**
+ * Merge per-segment results into one analysis.
+ *
+ * @param globalFirstDateMs - Instant of midnight (in `globalOffset`) on the first day
+ * @param globalOffset - The dataset's reference UTC offset in minutes east of UTC
+ */
+export function mergeSegmentResults(
+    segments: SegmentResult[],
+    globalFirstDateMs: number,
+    globalOffset: OffsetMinutes = browserOffsetMinutes()
+): CSFAnalysis {
     const empty: CSFAnalysis = {
         globalTau: 24,
         globalDailyDrift: 0,
@@ -25,22 +42,13 @@ export function mergeSegmentResults(segments: SegmentResult[], globalFirstDateMs
     const allResiduals: number[] = [];
     let anchorCount = 0;
 
-    const firstDate = new Date(globalFirstDateMs);
-
     for (let si = 0; si < segments.length; si++) {
         const seg = segments[si]!;
 
         if (si > 0) {
             const prevEnd = segments[si - 1]!.segLastDay;
             for (let d = prevEnd + 1; d < seg.segFirstDay; d++) {
-                const dayDate = new Date(firstDate);
-                dayDate.setDate(firstDate.getDate() + d);
-                const dateStr =
-                    dayDate.getFullYear() +
-                    "-" +
-                    String(dayDate.getMonth() + 1).padStart(2, "0") +
-                    "-" +
-                    String(dayDate.getDate()).padStart(2, "0");
+                const dateStr = zonedDateStr(globalFirstDateMs + d * MS_PER_DAY, globalOffset);
                 allDays.push({
                     date: dateStr,
                     nightStartHour: 0,
@@ -73,8 +81,7 @@ export function mergeSegmentResults(segments: SegmentResult[], globalFirstDateMs
             while (prevMid - mid > 12) mid += 24;
         }
 
-        const dayDate = new Date(day.date + "T00:00:00");
-        const globalD = Math.round((dayDate.getTime() - globalFirstDateMs) / 86_400_000);
+        const globalD = Math.round((zonedDayStartMs(day.date, globalOffset) - globalFirstDateMs) / MS_PER_DAY);
         overlayMids.push({ x: globalD, y: mid, w: day.confidenceScore });
         prevMid = mid;
     }

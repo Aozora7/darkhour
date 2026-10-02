@@ -80,6 +80,10 @@ const outputData = {
             dateOfSleep: r.dateOfSleep,
             startTime: r.startTime.toISOString(),
             endTime: r.endTime.toISOString(),
+            // Carry the recorded zone so the demo renders on the subject's own
+            // clock no matter which zone the browser is in.
+            startTimeOffsetMinutes: r.startTimeOffsetMinutes,
+            endTimeOffsetMinutes: r.endTimeOffsetMinutes,
             durationMs: r.durationMs,
             durationHours: r.durationHours,
             efficiency: r.efficiency,

@@ -2,14 +2,36 @@ import type { SleepRecord } from "../api/types";
 import type { RawSleepRecordV12 } from "../api/fitbitTypes";
 import type { GoogleHealthSleepDataPoint, GoogleHealthSleepPage } from "../api/googlehealth/types";
 import { parseGoogleHealthDataPoint, parseGoogleHealthDataPoints } from "../api/googlehealth/parse";
+import {
+    explicitOffsetMinutes,
+    hostOffsetAt,
+    resolveWallOffset,
+    toInstant,
+    type OffsetMinutes,
+} from "../utils/zonedTime";
 import { calculateSleepScore } from "../models/calculateSleepScore";
 
+/**
+ * Recover the zone a legacy v1.2 timestamp was written in.
+ *
+ * Fitbit v1.2 `startTime`/`endTime` carry a real zone designator, so the offset
+ * is recoverable. Zone-less values return `undefined` for the caller to handle.
+ */
+function legacyOffset(timestamp: string | undefined): OffsetMinutes | undefined {
+    return timestamp ? explicitOffsetMinutes(timestamp) : undefined;
+}
+
 function parseV12Record(raw: RawSleepRecordV12): SleepRecord {
+    const startOffset = legacyOffset(raw.startTime) ?? resolveWallOffset(raw.startTime);
+    const endOffset = legacyOffset(raw.endTime) ?? startOffset;
+
     const record: SleepRecord = {
         logId: typeof raw.logId === "number" ? raw.logId : Number(raw.logId),
         dateOfSleep: raw.dateOfSleep,
-        startTime: new Date(raw.startTime),
-        endTime: new Date(raw.endTime),
+        startTime: toInstant(raw.startTime, startOffset),
+        endTime: toInstant(raw.endTime, endOffset),
+        startTimeOffsetMinutes: startOffset,
+        endTimeOffsetMinutes: endOffset,
         durationMs: raw.duration,
         durationHours: raw.duration / 3_600_000,
         efficiency: raw.efficiency,
@@ -43,13 +65,30 @@ function parseV12Record(raw: RawSleepRecordV12): SleepRecord {
 /**
  * Re-hydrate a record from our own export format (SleepRecord serialized to JSON).
  * startTime/endTime are ISO strings that need to become Date objects.
+ *
+ * Exports written before offset tracking carry no zone metadata. `Date#toJSON`
+ * already wrote an unambiguous *instant*, so the recorded wall clock is simply
+ * unrecoverable — we adopt the browser's zone, which is exactly the frame those
+ * files were interpreted in before. Nothing shifts, and `dateOfSleep` is kept
+ * verbatim so day-based grouping and filtering stay identical.
  */
 function parseExportedRecord(raw: Record<string, unknown>): SleepRecord {
+    const startTime = new Date(raw.startTime as string);
+    const endTime = new Date(raw.endTime as string);
+
+    // DST-aware host offset for the record's own date, matching the frame these
+    // files were originally interpreted in.
+    const startOffset = (raw.startTimeOffsetMinutes as OffsetMinutes | undefined) ?? hostOffsetAt(startTime.getTime());
+    const rawEndOffset = raw.endTimeOffsetMinutes as OffsetMinutes | undefined;
+    const endOffset = rawEndOffset ?? startOffset;
+
     return {
         logId: raw.logId as number,
         dateOfSleep: raw.dateOfSleep as string,
-        startTime: new Date(raw.startTime as string),
-        endTime: new Date(raw.endTime as string),
+        startTime,
+        endTime,
+        startTimeOffsetMinutes: startOffset,
+        endTimeOffsetMinutes: endOffset,
         durationMs: raw.durationMs as number,
         durationHours: raw.durationHours as number,
         efficiency: raw.efficiency as number,

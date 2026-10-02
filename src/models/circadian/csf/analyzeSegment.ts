@@ -5,12 +5,21 @@ import { DEFAULT_CONFIG, TAU_MIN, TAU_MAX } from "./types";
 import { prepareAnchors } from "./anchors";
 import { forwardPass, rtsSmoother, normalizeAngle, circularDiff } from "./filter";
 import { smoothOutputPhase, correctEdges } from "./smoothing";
+import {
+    MS_PER_DAY,
+    browserOffsetMinutes,
+    hostOffsetAt,
+    type OffsetMinutes,
+    zonedDateStr,
+    zonedDayStartMs,
+} from "../../../utils/zonedTime";
 
 export function analyzeSegment(
     records: SleepRecord[],
     extraDays: number,
     globalFirstDateMs: number,
-    config: CSFConfig = DEFAULT_CONFIG
+    config: CSFConfig = DEFAULT_CONFIG,
+    globalOffset: OffsetMinutes = browserOffsetMinutes()
 ): SegmentResult | null {
     if (records.length === 0) return null;
 
@@ -22,8 +31,14 @@ export function analyzeSegment(
     const segFirstDay = firstAnchor.dayNumber;
     // Use last record's day (not last anchor's) so low-tier records that
     // aren't anchors still count as data days, not forecast days
+    const lastRecord = records[records.length - 1]!;
     const lastRecordDay = Math.round(
-        (new Date(records[records.length - 1]!.dateOfSleep + "T00:00:00").getTime() - globalFirstDateMs) / 86_400_000
+        (zonedDayStartMs(
+            lastRecord.dateOfSleep,
+            lastRecord.startTimeOffsetMinutes ?? hostOffsetAt(lastRecord.startTime.getTime())
+        ) -
+            globalFirstDateMs) /
+            MS_PER_DAY
     );
     const segLastDay = Math.max(lastAnchor.dayNumber, lastRecordDay) + extraDays;
     const totalDays = segLastDay - segFirstDay;
@@ -58,22 +73,15 @@ export function analyzeSegment(
     const days: CircadianDay[] = [];
     const residuals: number[] = [];
 
-    const firstDate = new Date(globalFirstDateMs);
-
     for (let localD = 0; localD <= totalDays; localD++) {
         const globalD = segFirstDay + localD;
         const state = outputStates[localD];
 
         if (!state) continue;
 
-        const dayDate = new Date(firstDate);
-        dayDate.setDate(firstDate.getDate() + globalD);
-        const dateStr =
-            dayDate.getFullYear() +
-            "-" +
-            String(dayDate.getMonth() + 1).padStart(2, "0") +
-            "-" +
-            String(dayDate.getDate()).padStart(2, "0");
+        // Label days on the shared grid, in the dataset's own offset, so these
+        // strings line up with the actogram rows and the records' dateOfSleep.
+        const dateStr = zonedDateStr(globalFirstDateMs + globalD * MS_PER_DAY, globalOffset);
 
         const predictedMid = state.smoothedPhase;
         const localTau = state.smoothedTau;

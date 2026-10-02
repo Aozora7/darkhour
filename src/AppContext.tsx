@@ -9,6 +9,7 @@ import { AppContext } from "./AppContextDef";
 import type { ScheduleEntry, AppState } from "./AppContextDef";
 import type { ColorMode } from "./components/Actogram/useActogramRenderer";
 import { getMaxCanvasHeightByUserAgent } from "./utils/getMaxCanvasHeightByUserAgent";
+import { MS_PER_DAY, referenceOffset, zonedDateStr, zonedDayStartMs } from "./utils/zonedTime";
 
 const MAX_CANVAS_HEIGHT = getMaxCanvasHeightByUserAgent();
 
@@ -86,14 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const firstDateStr = useMemo(() => {
         if (data.records.length === 0) return "";
-        const d = data.records[0]!.startTime;
-        return (
-            d.getFullYear() +
-            "-" +
-            String(d.getMonth() + 1).padStart(2, "0") +
-            "-" +
-            String(d.getDate()).padStart(2, "0")
-        );
+        return zonedDateStr(data.records[0]!.startTime.getTime(), referenceOffset(data.records));
     }, [data.records]);
 
     // Keep filter end in sync with totalDays during progressive fetch
@@ -112,17 +106,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.records.length === 0 || totalDays === 0) return data.records;
         if (filterStart === 0 && filterEnd >= totalDays) return data.records;
 
-        const base = new Date(data.records[0]!.startTime);
-        base.setHours(0, 0, 0, 0);
-        const rangeStart = new Date(base);
-        rangeStart.setDate(rangeStart.getDate() + filterStart);
-        const rangeStartMs = rangeStart.getTime();
-        const rangeEnd = new Date(base);
-        rangeEnd.setDate(rangeEnd.getDate() + filterEnd);
-        const rangeEndMs = rangeEnd.getTime();
+        // Day boundaries follow the actogram's own offset, not the viewer's, so the
+        // slider's day indices line up with the rows it is filtering.
+        const offset = referenceOffset(data.records);
+        const baseMs = zonedDayStartMs(firstDateStr, offset);
+        const rangeStartMs = baseMs + filterStart * MS_PER_DAY;
+        const rangeEndMs = baseMs + filterEnd * MS_PER_DAY;
 
         return data.records.filter((r) => r.endTime.getTime() > rangeStartMs && r.startTime.getTime() < rangeEndMs);
-    }, [data.records, filterStart, filterEnd, totalDays]);
+    }, [data.records, filterStart, filterEnd, totalDays, firstDateStr]);
 
     const handleFilterChange = useCallback((start: number, end: number) => {
         setFilterStart(start);

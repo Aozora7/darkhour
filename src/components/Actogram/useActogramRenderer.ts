@@ -5,6 +5,15 @@ import { type CircadianDay } from "../../models/circadian";
 import type { SleepLevelEntry } from "../../api/types";
 import type { ScheduleEntry } from "../../AppContextDef";
 import type { OverlayDay } from "../../models/overlayPath";
+import {
+    MS_PER_DAY,
+    MS_PER_HOUR,
+    MS_PER_MINUTE,
+    browserOffsetMinutes,
+    zonedDateStr,
+    zonedDayStartMs,
+    zonedParts,
+} from "../../utils/zonedTime";
 
 export type ColorMode = "stages" | "quality";
 
@@ -21,6 +30,12 @@ export interface ActogramConfig {
     scheduleEntries?: ScheduleEntry[];
     sortDirection?: "newest" | "oldest";
     showDateLabels?: boolean; // default true
+    /**
+     * UTC offset (minutes east) of the frame the rows are drawn in. Day boundaries,
+     * schedule blocks and tooltips all resolve in this zone so the plot never
+     * contradicts itself when opened from a different one.
+     */
+    offsetMinutes?: number;
 }
 
 const DEFAULT_CONFIG: ActogramConfig = {
@@ -45,6 +60,27 @@ const COLORS = {
     grid: "#334155",
     text: "#94a3b8",
 };
+
+/** Format an instant as `HH:MM` on the clock of the given UTC offset. */
+function formatClock(instantMs: number, offsetMinutes: number): string {
+    const { hour, minute } = zonedParts(instantMs, offsetMinutes);
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+/**
+ * Recover the frame the rows were built in.
+ *
+ * A calendar row's `startMs` is midnight of its own `date` in the reference
+ * offset, so the difference between the two recovers that offset exactly. This
+ * keeps the renderer consistent with the row builder without threading an extra
+ * prop through the component tree.
+ */
+function inferOffsetFromRows(rows: ActogramRow[]): number | undefined {
+    const row = rows.find((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date));
+    if (!row) return undefined;
+    const offset = (zonedDayStartMs(row.date, 0) - row.startMs) / MS_PER_MINUTE;
+    return Number.isFinite(offset) ? offset : undefined;
+}
 
 /** Map v1.2 stage level to color */
 function stageColor(level: string): string {
@@ -93,6 +129,7 @@ export function useActogramRenderer(
     const internalRef = useRef<HTMLCanvasElement>(null);
     const canvasRef = options.canvasRef ?? internalRef;
     const cfg = { ...DEFAULT_CONFIG, ...config };
+    const offsetMinutes = cfg.offsetMinutes ?? inferOffsetFromRows(rows) ?? browserOffsetMinutes();
     const tauMode = cfg.tauHours !== 24;
     const baseHours = tauMode ? cfg.tauHours : 24;
     const hoursPerRow = cfg.doublePlot ? baseHours * 2 : baseHours;
@@ -142,18 +179,23 @@ export function useActogramRenderer(
 
             for (const { block, offset, sourceRow } of blocksToCheck) {
                 if (hour >= block.startHour + offset && hour <= block.endHour + offset) {
+                    const rec = block.record;
+                    // Report the clock the data was recorded on — the same frame the
+                    // block is drawn in — rather than the viewer's local time.
+                    const startOffset = rec.startTimeOffsetMinutes ?? offsetMinutes;
+                    const endOffset = rec.endTimeOffsetMinutes ?? startOffset;
                     const info: Record<string, string> = {
                         date: sourceRow.date,
-                        start: block.record.startTime.toLocaleTimeString(),
-                        end: block.record.endTime.toLocaleTimeString(),
-                        duration: block.record.durationHours.toFixed(1) + "h",
-                        efficiency: block.record.efficiency + "%",
+                        start: formatClock(rec.startTime.getTime(), startOffset),
+                        end: formatClock(rec.endTime.getTime(), endOffset),
+                        duration: rec.durationHours.toFixed(1) + "h",
+                        efficiency: rec.efficiency + "%",
                     };
-                    if (block.record.stages) {
-                        const s = block.record.stages;
+                    if (rec.stages) {
+                        const s = rec.stages;
                         info.stages = `D:${s.deep} L:${s.light} R:${s.rem} W:${s.wake}min`;
                     }
-                    info.quality = ((block.record.sleepScore || 0) * 100).toFixed(0) + "%";
+                    info.quality = ((rec.sleepScore || 0) * 100).toFixed(0) + "%";
                     return info;
                 }
             }
@@ -450,16 +492,14 @@ export function useActogramRenderer(
             const drawScheduleForRow = (sourceRow: ActogramRow, y: number, offset: number) => {
                 if (tauMode && sourceRow.startMs != null) {
                     const rowStartMs = sourceRow.startMs;
-                    const rowEndMs = rowStartMs + baseHours * 3_600_000;
+                    const rowEndMs = rowStartMs + baseHours * MS_PER_HOUR;
 
-                    const startDate = new Date(rowStartMs);
-                    const endDate = new Date(rowEndMs);
-                    const d = new Date(startDate);
-                    d.setHours(0, 0, 0, 0);
+                    // Walk whole days in the dataset's own offset, so the schedule
+                    // lands on the same wall-clock hours as the sleep blocks.
+                    let dayMs = zonedDayStartMs(zonedDateStr(rowStartMs, offsetMinutes), offsetMinutes);
 
-                    while (d.getTime() <= endDate.getTime()) {
-                        const dayMs = d.getTime();
-                        const jsDay = d.getDay();
+                    while (dayMs <= rowEndMs) {
+                        const jsDay = new Date(dayMs + 12 * MS_PER_HOUR).getUTCDay();
                         const dayIndex = jsDay === 0 ? 6 : jsDay - 1;
 
                         for (const entry of cfg.scheduleEntries!) {
@@ -482,23 +522,24 @@ export function useActogramRenderer(
                             };
 
                             if (eH <= sH) {
-                                const startMs = dayMs + sH * 3_600_000;
-                                const endMs = dayMs + 24 * 3_600_000 + eH * 3_600_000;
-                                drawAbsBlock(startMs, dayMs + 24 * 3_600_000);
-                                drawAbsBlock(dayMs + 24 * 3_600_000, endMs);
+                                const startMs = dayMs + sH * MS_PER_HOUR;
+                                const endMs = dayMs + MS_PER_DAY + eH * MS_PER_HOUR;
+                                drawAbsBlock(startMs, dayMs + MS_PER_DAY);
+                                drawAbsBlock(dayMs + MS_PER_DAY, endMs);
                             } else {
-                                const startMs = dayMs + sH * 3_600_000;
-                                const endMs = dayMs + eH * 3_600_000;
+                                const startMs = dayMs + sH * MS_PER_HOUR;
+                                const endMs = dayMs + eH * MS_PER_HOUR;
                                 drawAbsBlock(startMs, endMs);
                             }
                         }
 
-                        d.setDate(d.getDate() + 1);
+                        dayMs += MS_PER_DAY;
                     }
                 } else {
+                    // Weekday comes from the date-only row label; noon avoids any
+                    // DST edge and the result is zone-independent.
                     const dateStr = sourceRow.date.slice(0, 10);
-                    const dateObj = new Date(dateStr + "T12:00:00");
-                    const jsDay = dateObj.getDay();
+                    const jsDay = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
                     const dayIndex = jsDay === 0 ? 6 : jsDay - 1;
 
                     for (const entry of cfg.scheduleEntries!) {
@@ -551,7 +592,7 @@ export function useActogramRenderer(
             const y = plotTop + i * cfg.rowHeight;
 
             // Helper to draw a block at a given hour offset on this row's y position
-            const drawBlockAt = (block: (typeof row.blocks)[0], hourOffset: number, sourceRow: ActogramRow) => {
+            const drawBlockAt = (block: (typeof row.blocks)[0], hourOffset: number) => {
                 const bStart = block.startHour + hourOffset;
                 const bEnd = block.endHour + hourOffset;
                 const blockPixelWidth = xScale(bEnd) - xScale(bStart);
@@ -564,14 +605,12 @@ export function useActogramRenderer(
                         ctx,
                         xScale,
                         block.record.stageData,
-                        block.record.startTime,
-                        sourceRow.date,
+                        block.startMs,
+                        block.endMs,
                         bStart,
                         bEnd,
                         y,
-                        cfg.rowHeight,
-                        hourOffset,
-                        sourceRow.startMs
+                        cfg.rowHeight
                     );
                 } else {
                     ctx.fillStyle = COLORS.light;
@@ -581,7 +620,7 @@ export function useActogramRenderer(
 
             // Left side: this row's blocks
             for (const block of row.blocks) {
-                drawBlockAt(block, 0, row);
+                drawBlockAt(block, 0);
             }
 
             // Right side: next day's blocks
@@ -590,7 +629,7 @@ export function useActogramRenderer(
                 if (nextIdx >= 0 && nextIdx < rows.length) {
                     const nextDayRow = rows[nextIdx]!;
                     for (const block of nextDayRow.blocks) {
-                        drawBlockAt(block, baseHours, nextDayRow);
+                        drawBlockAt(block, baseHours);
                     }
                 }
             }
@@ -642,71 +681,40 @@ export function useActogramRenderer(
 }
 
 /**
- * Draw a sleep block colored by v1.2 stage data intervals.
+ * Draw a sleep block colored by stage data intervals.
  *
  * blockStartHour/blockEndHour are on the x-axis scale (0..24 or 0..48 for double plot).
  * hourOffset is 0 for the first plot, 24 for the double-plot repeat.
  *
- * Strategy: compute the block's absolute time boundaries, then map each stage entry
- * into the x-axis coordinate space by linear interpolation.
+ * The block's absolute bounds come straight from the row builder, which already
+ * clipped them against the row window in the dataset's reference offset, so
+ * stage intervals only need to be clipped and mapped linearly onto that window.
  */
 function drawStageBlock(
     ctx: CanvasRenderingContext2D,
     xScale: (h: number) => number,
     stageData: SleepLevelEntry[],
-    recordStart: Date,
-    _rowDate: string,
+    blockStartMs: number,
+    blockEndMs: number,
     blockStartHour: number,
     blockEndHour: number,
     y: number,
-    rowHeight: number,
-    hourOffset: number,
-    rowStartMs?: number
+    rowHeight: number
 ) {
     if (blockEndHour <= blockStartHour) return;
-    const blockDurationHours = blockEndHour - blockStartHour;
-
-    let blockAbsStartMs: number;
-    let blockAbsEndMs: number;
-
-    if (rowStartMs != null) {
-        // Tau mode: row startMs is known, so absolute position is straightforward
-        const localBlockStartH = blockStartHour - hourOffset;
-        blockAbsStartMs = rowStartMs + localBlockStartH * 3_600_000;
-        blockAbsEndMs = blockAbsStartMs + blockDurationHours * 3_600_000;
-    } else {
-        // Calendar mode: reconstruct from midnight
-        const recordStartMs = recordStart.getTime();
-        const recordMidnight = new Date(recordStart);
-        recordMidnight.setHours(0, 0, 0, 0);
-        const recordMidnightMs = recordMidnight.getTime();
-
-        const localBlockStartH = blockStartHour - hourOffset;
-        const recordLocalStartH = (recordStartMs - recordMidnightMs) / 3_600_000;
-
-        let dayMidnightMs: number;
-        if (localBlockStartH >= recordLocalStartH - 0.5) {
-            dayMidnightMs = recordMidnightMs;
-        } else {
-            dayMidnightMs = recordMidnightMs + 24 * 3_600_000;
-        }
-
-        blockAbsStartMs = dayMidnightMs + localBlockStartH * 3_600_000;
-        blockAbsEndMs = blockAbsStartMs + blockDurationHours * 3_600_000;
-    }
 
     for (const entry of stageData) {
         const entryStartMs = new Date(entry.dateTime).getTime();
         const entryEndMs = entryStartMs + entry.seconds * 1000;
 
         // Clip to block time range
-        const visStartMs = Math.max(entryStartMs, blockAbsStartMs);
-        const visEndMs = Math.min(entryEndMs, blockAbsEndMs);
+        const visStartMs = Math.max(entryStartMs, blockStartMs);
+        const visEndMs = Math.min(entryEndMs, blockEndMs);
         if (visEndMs <= visStartMs) continue;
 
         // Map to x-axis hours
-        const xStart = blockStartHour + (visStartMs - blockAbsStartMs) / 3_600_000;
-        const xEnd = blockStartHour + (visEndMs - blockAbsStartMs) / 3_600_000;
+        const xStart = blockStartHour + (visStartMs - blockStartMs) / 3_600_000;
+        const xEnd = blockStartHour + (visEndMs - blockStartMs) / 3_600_000;
 
         ctx.fillStyle = stageColor(entry.level);
         ctx.fillRect(xScale(xStart), y, Math.max(xScale(xEnd) - xScale(xStart), 0.5), rowHeight - 0.5);

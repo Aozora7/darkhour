@@ -1,10 +1,29 @@
 import type { SleepLevelEntry, SleepRecord, SleepStageLevel, SleepStages } from "../types";
 import type { GoogleHealthSleepDataPoint, GoogleHealthSleepStage } from "./types";
+import {
+    browserOffsetMinutes,
+    parseUtcOffset,
+    resolveWallOffset,
+    toInstant,
+    zonedDateStr,
+    type OffsetMinutes,
+} from "../../utils/zonedTime";
 
-function formatLocalDate(d: Date): string {
-    return (
-        d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0")
-    );
+/**
+ * Resolve the zone an interval was recorded in.
+ *
+ * The API normally supplies both offsets, but `endUtcOffset` is occasionally
+ * missing, so we fall back to the start offset and finally to the browser zone.
+ */
+function resolveOffsets(interval: GoogleHealthSleepDataPoint["sleep"]["interval"]): {
+    start: OffsetMinutes;
+    end: OffsetMinutes;
+} {
+    const start =
+        parseUtcOffset(interval?.startUtcOffset) ??
+        (interval?.startTime ? resolveWallOffset(interval.startTime) : browserOffsetMinutes());
+    const end = parseUtcOffset(interval?.endUtcOffset) ?? start;
+    return { start, end };
 }
 
 function parseStageLevel(type: string): SleepStageLevel {
@@ -14,15 +33,21 @@ function parseStageLevel(type: string): SleepStageLevel {
     return "wake";
 }
 
-function buildStageData(stages: GoogleHealthSleepStage[] | undefined): SleepLevelEntry[] {
+function buildStageData(
+    stages: GoogleHealthSleepStage[] | undefined,
+    fallbackOffset: OffsetMinutes
+): SleepLevelEntry[] {
     if (!stages || stages.length === 0) return [];
     return stages
         .map((s) => {
-            const start = new Date(s.startTime).getTime();
-            const end = new Date(s.endTime).getTime();
-            const seconds = Math.max(0, Math.round((end - start) / 1000));
+            const offset = parseUtcOffset(s.startUtcOffset) ?? fallbackOffset;
+            // Normalise to an absolute instant so downstream rendering never has
+            // to guess which zone a zone-less wall-clock string belongs to.
+            const startMs = toInstant(s.startTime, offset).getTime();
+            const endMs = toInstant(s.endTime, parseUtcOffset(s.endUtcOffset) ?? offset).getTime();
+            const seconds = Math.max(0, Math.round((endMs - startMs) / 1000));
             return {
-                dateTime: s.startTime,
+                dateTime: new Date(startMs).toISOString(),
                 level: parseStageLevel(s.type),
                 seconds,
             };
@@ -61,8 +86,13 @@ export function parseGoogleHealthDataPoints(dataPoints: GoogleHealthSleepDataPoi
     });
 }
 export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): SleepRecord {
-    const start = dp.sleep?.interval?.startTime ? new Date(dp.sleep.interval.startTime) : new Date(0);
-    const end = dp.sleep?.interval?.endTime ? new Date(dp.sleep.interval.endTime) : new Date(0);
+    const interval = dp.sleep?.interval;
+    const { start: startOffset, end: endOffset } = resolveOffsets(interval);
+
+    // Wall-clock + recorded offset -> absolute instant. This is the step that was
+    // previously missing: `new Date(startTime)` silently used the browser's zone.
+    const start = interval?.startTime ? toInstant(interval.startTime, startOffset) : new Date(0);
+    const end = interval?.endTime ? toInstant(interval.endTime, endOffset) : new Date(0);
     const durationMs = Math.max(0, end.getTime() - start.getTime());
 
     const minutesAsleep = Number.parseInt(dp.sleep?.summary?.minutesAsleep ?? "0", 10) || 0;
@@ -70,9 +100,11 @@ export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): Slee
 
     const record: SleepRecord = {
         logId: deriveLogId(dp, start),
-        dateOfSleep: formatLocalDate(start),
+        dateOfSleep: zonedDateStr(start.getTime(), startOffset),
         startTime: start,
         endTime: end,
+        startTimeOffsetMinutes: startOffset,
+        endTimeOffsetMinutes: endOffset,
         durationMs,
         durationHours: durationMs / 3600000,
         // Google Health doesn't provide an efficiency score; approximate.
@@ -87,7 +119,7 @@ export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): Slee
     const stages = buildStagesSummary(dp);
     if (stages) record.stages = stages;
 
-    record.stageData = buildStageData(dp.sleep?.stages);
+    record.stageData = buildStageData(dp.sleep?.stages, startOffset);
 
     return record;
 }

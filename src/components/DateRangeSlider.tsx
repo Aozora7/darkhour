@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useAppContext } from "../useAppContext";
 import { usePersistedState } from "../usePersistedState";
+import { addDaysToDateStr } from "../utils/zonedTime";
 
 /**
  * Dual-thumb range slider for date filtering.
@@ -57,15 +58,7 @@ export default function DateRangeSlider() {
     const dayLabel = useCallback(
         (dayIdx: number): string => {
             if (!firstDateStr) return "";
-            const d = new Date(firstDateStr + "T00:00:00");
-            d.setDate(d.getDate() + dayIdx);
-            return (
-                d.getFullYear() +
-                "-" +
-                String(d.getMonth() + 1).padStart(2, "0") +
-                "-" +
-                String(d.getDate()).padStart(2, "0")
-            );
+            return addDaysToDateStr(firstDateStr, dayIdx);
         },
         [firstDateStr]
     );
@@ -75,15 +68,12 @@ export default function DateRangeSlider() {
         if (!firstDateStr || totalDays <= 1) return [];
 
         const marks: Array<{ dayIdx: number; year: number }> = [];
-        const firstDate = new Date(firstDateStr + "T00:00:00");
 
         // Find all year boundaries within the range
-        const currentDate = new Date(firstDate);
         for (let dayIdx = 0; dayIdx <= totalDays; dayIdx++) {
-            currentDate.setTime(firstDate.getTime());
-            currentDate.setDate(firstDate.getDate() + dayIdx);
-            if (currentDate.getMonth() === 0 && currentDate.getDate() === 1) {
-                marks.push({ dayIdx, year: currentDate.getFullYear() });
+            const dateStr = addDaysToDateStr(firstDateStr, dayIdx);
+            if (dateStr.slice(5, 7) === "01" && dateStr.slice(8, 10) === "01") {
+                marks.push({ dayIdx, year: Number(dateStr.slice(0, 4)) });
             }
         }
 

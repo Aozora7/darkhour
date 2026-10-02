@@ -17,19 +17,21 @@ export interface GroundTruthDataset {
 
 export function listGroundTruthDatasets(): GroundTruthDataset[] {
     if (!hasTestData) return [];
-    return readdirSync(TEST_DATA_DIR)
-        .filter((f) => f.endsWith(".json"))
-        .map((f) => {
-            const raw = JSON.parse(readFileSync(join(TEST_DATA_DIR, f), "utf-8"));
-            if (!raw.sleep || !raw.overlay) {
-                throw new Error(`test-data/${f}: missing "sleep" or "overlay" key`);
-            }
-            return {
-                name: f.replace(/\.json$/, ""),
-                records: parseSleepData(raw.sleep),
-                overlay: raw.overlay as OverlayDay[],
-            };
-        });
+    return (
+        readdirSync(TEST_DATA_DIR)
+            .filter((f) => f.endsWith(".json"))
+            .map((f) => {
+                const raw = JSON.parse(readFileSync(join(TEST_DATA_DIR, f), "utf-8"));
+                return {
+                    name: f.replace(/\.json$/, ""),
+                    records: parseSleepData(raw.sleep),
+                    overlay: raw.overlay as OverlayDay[] | undefined,
+                };
+            })
+            // A file without a manual overlay is raw data, not a scored pair — skip it
+            // rather than failing every other dataset in the directory.
+            .filter((d): d is GroundTruthDataset & { overlay: OverlayDay[] } => Array.isArray(d.overlay))
+    );
 }
 
 export interface BaselineFile {

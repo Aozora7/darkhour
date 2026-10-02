@@ -1,4 +1,5 @@
 import type { SleepRecord } from "../api/types";
+import { MS_PER_DAY, MS_PER_HOUR, referenceOffset, zonedDayStartMs } from "../utils/zonedTime";
 
 export interface PeriodogramAnchor {
     dayNumber: number;
@@ -24,15 +25,20 @@ export function buildPeriodogramAnchors(records: SleepRecord[]): PeriodogramAnch
     if (records.length === 0) return [];
 
     const sorted = [...records].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-    const firstDateMs = new Date(sorted[0]!.dateOfSleep + "T00:00:00").getTime();
+    // Day anchors use the global frame (from the earliest record) so the whole
+    // series shares one grid, while each record's own offset keeps DST-correct
+    // local hours and a 23/25 h step across a transition.
+    const offset = referenceOffset(sorted);
+    const firstDateMs = zonedDayStartMs(sorted[0]!.dateOfSleep, offset);
 
     return sorted
         .filter((r) => r.isMainSleep && r.durationHours >= 4)
         .map((r) => {
-            const dayNumber = Math.round((new Date(r.dateOfSleep + "T00:00:00").getTime() - firstDateMs) / 86_400_000);
+            const own = r.startTimeOffsetMinutes ?? offset;
+            const dayStart = zonedDayStartMs(r.dateOfSleep, own);
+            const dayNumber = Math.round((dayStart - firstDateMs) / MS_PER_DAY);
             const midpointMs = (r.startTime.getTime() + r.endTime.getTime()) / 2;
-            const midnightMs = new Date(r.dateOfSleep + "T00:00:00").getTime();
-            const midpointHour = (midpointMs - midnightMs) / 3_600_000;
+            const midpointHour = (midpointMs - dayStart) / MS_PER_HOUR;
             const weight = (r.sleepScore || 0) * Math.min(1, r.durationHours / 7);
 
             return { dayNumber, midpointHour, weight };

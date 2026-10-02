@@ -1,14 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { computeAnchorWeight, sleepMidpointHour, prepareAnchors } from "../anchors";
 import type { SleepRecord } from "../../../../api/types";
+import { hostOffsetAt } from "../../../../utils/zonedTime";
 
 function makeSleepRecord(overrides: Partial<SleepRecord> = {}): SleepRecord {
     const base = new Date("2024-03-15T23:00:00");
+    const startTime = overrides.startTime ?? base;
+    const endTime = overrides.endTime ?? new Date(base.getTime() + 8 * 3_600_000);
     return {
         logId: 1,
         dateOfSleep: "2024-03-15",
-        startTime: base,
-        endTime: new Date(base.getTime() + 8 * 3_600_000),
+        startTime,
+        endTime,
+        // Timestamps are host-local, so the recorded offset is the host offset at
+        // that date (DST-aware, not the offset "now").
+        startTimeOffsetMinutes: hostOffsetAt(startTime.getTime()),
+        endTimeOffsetMinutes: hostOffsetAt(endTime.getTime()),
         durationMs: 8 * 3_600_000,
         durationHours: 8,
         efficiency: 90,

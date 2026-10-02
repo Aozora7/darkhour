@@ -1,5 +1,7 @@
 // ── Manual overlay path: types + interpolation ─────────────────────
 
+import { MS_PER_DAY, addDaysToDateStr, zonedDayStartMs } from "../utils/zonedTime";
+
 /** A user-placed control point for the manual overlay */
 export interface OverlayControlPoint {
     /** ISO date string "YYYY-MM-DD" */
@@ -19,19 +21,13 @@ export interface OverlayDay {
 
 /** Days between two "YYYY-MM-DD" strings (positive if b > a) */
 function daysBetween(a: string, b: string): number {
-    const da = new Date(a + "T00:00:00");
-    const db = new Date(b + "T00:00:00");
-    return Math.round((db.getTime() - da.getTime()) / 86_400_000);
+    // Date-only arithmetic at offset 0: exact, and independent of the host zone.
+    return Math.round((zonedDayStartMs(b, 0) - zonedDayStartMs(a, 0)) / MS_PER_DAY);
 }
 
 /** Add N days to a "YYYY-MM-DD" string */
 function addDays(date: string, n: number): string {
-    const d = new Date(date + "T00:00:00");
-    d.setDate(d.getDate() + n);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    return addDaysToDateStr(date, n);
 }
 
 /**

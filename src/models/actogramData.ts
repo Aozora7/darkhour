@@ -1,4 +1,13 @@
 import type { SleepRecord } from "../api/types";
+import {
+    addDaysToDateStr,
+    MS_PER_DAY,
+    MS_PER_HOUR,
+    referenceOffset,
+    zonedDateStr,
+    zonedDateTimeStr,
+    zonedDayStartMs,
+} from "../utils/zonedTime";
 
 /** A single sleep block positioned within a row's time window */
 export interface SleepBlock {
@@ -6,6 +15,10 @@ export interface SleepBlock {
     startHour: number;
     /** Fractional hour end within the row (0 to rowWidth) */
     endHour: number;
+    /** Absolute instant the block starts, for sub-hour-accurate stage rendering */
+    startMs: number;
+    /** Absolute instant the block ends */
+    endMs: number;
     /** Original record reference (carries stageData) */
     record: SleepRecord;
 }
@@ -16,29 +29,20 @@ export interface ActogramRow {
     date: string;
     /** Sleep blocks clipped to this row's time window */
     blocks: SleepBlock[];
-    /** Absolute start time of this row in ms (present in tau mode) */
-    startMs?: number;
-}
-
-/** Format a local Date as "YYYY-MM-DD" without UTC conversion */
-function toLocalDateStr(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-}
-
-/** Get local midnight for a date */
-function localMidnight(d: Date): Date {
-    const m = new Date(d);
-    m.setHours(0, 0, 0, 0);
-    return m;
+    /** Absolute start time of this row in ms */
+    startMs: number;
 }
 
 /**
  * Build actogram row data from sleep records.
  * Each calendar day in the range gets a row with any overlapping sleep blocks
  * clipped to the [0, 24) hour window of that day.
+ *
+ * Days are delimited in the dataset's own reference offset (see
+ * `referenceOffset`), not the viewer's, so the actogram looks identical wherever
+ * it is opened and travel periods don't appear as phase jumps. A fixed offset
+ * also makes every day exactly 24 h, which removes the DST skew the previous
+ * local-midnight arithmetic was subject to.
  *
  * @param extraDays - Number of empty forecast days to append after the data range
  * @param sortDirection - "newest" for newest-first (default), "oldest" for oldest-first
@@ -50,20 +54,22 @@ export function buildActogramRows(
 ): ActogramRow[] {
     if (records.length === 0) return [];
 
-    // Find date range
-    const firstDate = records[0]!.startTime;
-    const lastDate = records[records.length - 1]!.endTime;
-
-    // Generate all calendar days in range (using local dates), plus forecast days
+    const offset = referenceOffset(records);
+    const first = records[0]!;
+    const last = records[records.length - 1]!;
+    // Generate all calendar days in the reference frame, plus forecast days
     const rows: ActogramRow[] = [];
-    const current = localMidnight(firstDate);
-    const end = new Date(lastDate);
-    end.setHours(23, 59, 59, 999);
-    end.setDate(end.getDate() + extraDays);
+    const firstDay = zonedDateStr(first.startTime.getTime(), offset);
+    const totalDays =
+        Math.round(
+            (zonedDayStartMs(zonedDateStr(last.endTime.getTime(), offset), offset) -
+                zonedDayStartMs(firstDay, offset)) /
+                MS_PER_DAY
+        ) + 1;
 
-    while (current <= end) {
-        rows.push({ date: toLocalDateStr(current), blocks: [] });
-        current.setDate(current.getDate() + 1);
+    for (let i = 0; i < totalDays + extraDays; i++) {
+        const date = addDaysToDateStr(firstDay, i);
+        rows.push({ date, blocks: [], startMs: zonedDayStartMs(date, offset) });
     }
 
     // Map date string to row index for fast lookup
@@ -71,36 +77,31 @@ export function buildActogramRows(
     rows.forEach((row, i) => dateIndex.set(row.date, i));
 
     // Place each sleep record into overlapping day rows
+    const originMs = rows[0]!.startMs;
     for (const record of records) {
-        const sleepStart = new Date(record.startTime);
-        const sleepEnd = new Date(record.endTime);
-        const dayStart = localMidnight(sleepStart);
+        const sleepStart = record.startTime.getTime();
+        const sleepEnd = record.endTime.getTime();
 
-        while (dayStart < sleepEnd) {
-            const dateStr = toLocalDateStr(dayStart);
-            const rowIdx = dateIndex.get(dateStr);
+        // Rows are uniformly spaced from `originMs`, so the overlapping range is
+        // a direct division. `sleepEnd - 1` keeps a block that ends exactly at
+        // midnight off the following day.
+        const firstRow = Math.max(0, Math.floor((sleepStart - originMs) / MS_PER_DAY));
+        const lastRow = Math.min(rows.length - 1, Math.floor((sleepEnd - 1 - originMs) / MS_PER_DAY));
 
-            if (rowIdx !== undefined) {
-                const dayMidnight = dayStart.getTime();
-                const dayEndMs = dayMidnight + 24 * 3_600_000;
+        for (let i = firstRow; i <= lastRow; i++) {
+            const dayMidnight = rows[i]!.startMs;
+            const blockStart = Math.max(sleepStart, dayMidnight);
+            const blockEnd = Math.min(sleepEnd, dayMidnight + MS_PER_DAY);
 
-                // Clip sleep to this day's window
-                const blockStart = Math.max(sleepStart.getTime(), dayMidnight);
-                const blockEnd = Math.min(sleepEnd.getTime(), dayEndMs);
-
-                if (blockEnd > blockStart) {
-                    const startHour = (blockStart - dayMidnight) / 3_600_000;
-                    const endHour = (blockEnd - dayMidnight) / 3_600_000;
-
-                    rows[rowIdx]!.blocks.push({
-                        startHour,
-                        endHour,
-                        record,
-                    });
-                }
+            if (blockEnd > blockStart) {
+                rows[i]!.blocks.push({
+                    startHour: (blockStart - dayMidnight) / MS_PER_HOUR,
+                    endHour: (blockEnd - dayMidnight) / MS_PER_HOUR,
+                    startMs: blockStart,
+                    endMs: blockEnd,
+                    record,
+                });
             }
-
-            dayStart.setDate(dayStart.getDate() + 1);
         }
     }
 
@@ -112,9 +113,10 @@ export function buildActogramRows(
 
 /**
  * Build actogram rows with a custom row width (tau) in hours.
- * Each row spans `tau` hours, starting from the first record's midnight.
+ * Each row spans `tau` hours, starting from the first record's midnight in the
+ * dataset's reference offset.
  * When tau=24 the result is equivalent to buildActogramRows (but row 0
- * starts at the first record's local midnight rather than calendar-day aligned).
+ * starts at the first record's midnight rather than calendar-day aligned).
  *
  * @param sortDirection - "newest" for newest-first (default), "oldest" for oldest-first
  */
@@ -126,25 +128,22 @@ export function buildTauRows(
 ): ActogramRow[] {
     if (records.length === 0) return [];
 
-    const tauMs = tau * 3_600_000;
+    const offset = referenceOffset(records);
+    const tauMs = tau * MS_PER_HOUR;
 
-    // Start from midnight of the first record's day
-    const originMs = localMidnight(records[0]!.startTime).getTime();
-    const lastDate = new Date(records[records.length - 1]!.endTime);
-    lastDate.setDate(lastDate.getDate() + extraDays);
-    const lastMs = lastDate.getTime();
+    // Start from midnight of the first record's day, in the reference frame
+    const originMs = zonedDayStartMs(zonedDateStr(records[0]!.startTime.getTime(), offset), offset);
+    const lastDate = records[records.length - 1]!.endTime;
+    const lastMs = lastDate.getTime() + extraDays * MS_PER_DAY;
 
     const rowCount = Math.ceil((lastMs - originMs) / tauMs);
     const rows: ActogramRow[] = [];
 
     for (let i = 0; i < rowCount; i++) {
         const rowStartMs = originMs + i * tauMs;
-        const d = new Date(rowStartMs);
-        const dateStr = toLocalDateStr(d);
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "0");
-        // Only append time if row doesn't start at midnight
-        const label = d.getHours() === 0 && d.getMinutes() === 0 ? dateStr : `${dateStr} ${hh}:${mm}`;
+        const dateStr = zonedDateStr(rowStartMs, offset);
+        // Only append time if the row doesn't start at midnight
+        const label = rowStartMs === zonedDayStartMs(dateStr, offset) ? dateStr : zonedDateTimeStr(rowStartMs, offset);
 
         rows.push({ date: label, blocks: [], startMs: rowStartMs });
     }
@@ -167,8 +166,10 @@ export function buildTauRows(
 
             if (blockEndMs > blockStartMs) {
                 rows[i]!.blocks.push({
-                    startHour: (blockStartMs - rowStartMs) / 3_600_000,
-                    endHour: (blockEndMs - rowStartMs) / 3_600_000,
+                    startHour: (blockStartMs - rowStartMs) / MS_PER_HOUR,
+                    endHour: (blockEndMs - rowStartMs) / MS_PER_HOUR,
+                    startMs: blockStartMs,
+                    endMs: blockEndMs,
                     record,
                 });
             }

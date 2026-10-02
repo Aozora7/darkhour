@@ -3,7 +3,8 @@
 export type SleepStageLevel = "wake" | "light" | "deep" | "rem";
 
 export interface SleepLevelEntry {
-    dateTime: string; // ISO datetime
+    /** Absolute instant of the interval start, as an ISO 8601 string. */
+    dateTime: string;
     level: SleepStageLevel;
     seconds: number;
 }

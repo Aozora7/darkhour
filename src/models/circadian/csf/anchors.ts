@@ -1,5 +1,6 @@
 import type { CSFAnchor } from "./types";
 import type { SleepRecord } from "../../../api/types";
+import { MS_PER_DAY, hostOffsetAt, zonedDayStartMs } from "../../../utils/zonedTime";
 
 export function computeAnchorWeight(record: SleepRecord): number | null {
     const quality = record.sleepScore || 0;
@@ -31,10 +32,14 @@ export function prepareAnchors(records: SleepRecord[], globalFirstDateMs: number
     for (const c of candidates) {
         const existing = bestByDate.get(c.record.dateOfSleep);
         if (!existing || c.weight > existing.weight) {
+            // Anchor on the record's own day start, so a DST change mid-series
+            // yields a 23 h or 25 h step that still rounds to the right day.
+            const dayStart = zonedDayStartMs(
+                c.record.dateOfSleep,
+                c.record.startTimeOffsetMinutes ?? hostOffsetAt(c.record.startTime.getTime())
+            );
             bestByDate.set(c.record.dateOfSleep, {
-                dayNumber: Math.round(
-                    (new Date(c.record.dateOfSleep + "T00:00:00").getTime() - globalFirstDateMs) / 86_400_000
-                ),
+                dayNumber: Math.round((dayStart - globalFirstDateMs) / MS_PER_DAY),
                 midpointHour: sleepMidpointHour(c.record, globalFirstDateMs),
                 weight: c.weight,
                 record: c.record,

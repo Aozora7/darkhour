@@ -16,6 +16,7 @@ import { DEFAULT_CONFIG } from "./types";
 import { splitIntoSegments } from "../segments";
 import { analyzeSegment } from "./analyzeSegment";
 import { mergeSegmentResults, ALGORITHM_ID } from "./mergeSegments";
+import { referenceOffset, zonedDayStartMs } from "../../../utils/zonedTime";
 
 export { ALGORITHM_ID };
 export type { CSFAnalysis, CSFConfig } from "./types";
@@ -30,14 +31,17 @@ export function analyzeCircadian(
     }
 
     const sorted = [...records].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-    const globalFirstDateMs = new Date(sorted[0]!.dateOfSleep + "T00:00:00").getTime();
+    // Anchor every segment to the same day grid, expressed in the dataset's own
+    // UTC offset rather than the viewer's.
+    const globalOffset = referenceOffset(sorted);
+    const globalFirstDateMs = zonedDayStartMs(sorted[0]!.dateOfSleep, globalOffset);
     const segments = splitIntoSegments(sorted);
 
     const results = segments
-        .map((seg) => analyzeSegment(seg, extraDays, globalFirstDateMs, config))
+        .map((seg) => analyzeSegment(seg, extraDays, globalFirstDateMs, config, globalOffset))
         .filter((r): r is NonNullable<typeof r> => r !== null);
 
-    return mergeSegmentResults(results, globalFirstDateMs);
+    return mergeSegmentResults(results, globalFirstDateMs, globalOffset);
 }
 
 export const _internals = {
