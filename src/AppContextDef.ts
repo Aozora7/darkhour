@@ -3,6 +3,7 @@ import type { GoogleHealthDataState } from "./data/useGoogleHealthData";
 import type { CircadianAnalysis } from "./models/circadian";
 import type { ColorMode } from "./components/Actogram/useActogramRenderer";
 import type { SleepRecord } from "./api/types";
+import type { DataSourceFamilyId } from "./api/googlehealth/types";
 import type { OverlayControlPoint, OverlayDay } from "./models/overlayPath";
 
 // ── Schedule types ───────────────────────────────────────────────
@@ -34,6 +35,12 @@ export interface AppState {
     circadianAnalysis: CircadianAnalysis;
     circadianAlgorithmId: string;
     setCircadianAlgorithmId: (id: string) => void;
+    /**
+     * Which slice of the user's data the API is asked for. Changing this changes
+     * what gets downloaded; it does not filter records already held.
+     */
+    dataSourceFamily: DataSourceFamilyId;
+    setDataSourceFamily: (v: DataSourceFamilyId) => void;
     forecastDays: number;
     setForecastDays: (v: number) => void;
     forecastDisabled: boolean;

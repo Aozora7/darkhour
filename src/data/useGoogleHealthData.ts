@@ -6,6 +6,7 @@ import demoData from "./demo-data.json";
 import { fetchAllSleepRecords, fetchNewSleepRecords } from "../api/googlehealth/api";
 import { getCachedRecords, getLatestDateOfSleep, putRecords, clearUserCache } from "../api/googlehealth/cache";
 import type { GoogleHealthSleepDataPoint } from "../api/googlehealth/types";
+import { cacheScope, type DataSourceFamilyId } from "../api/googlehealth/types";
 import { parseGoogleHealthDataPoints } from "../api/googlehealth/parse";
 
 export interface GoogleHealthDataState {
@@ -15,12 +16,13 @@ export interface GoogleHealthDataState {
     fetching: boolean;
     fetchProgress: string;
     accountNotLinked: boolean;
-    startFetch: (token: string, userId: string) => void;
+    startFetch: (token: string, userId: string, family: DataSourceFamilyId) => void;
     stopFetch: () => void;
     importFromFiles: (files: File[]) => Promise<void>;
     loadDemoData: () => void;
     exportToFile: (recordsToExport?: SleepRecord[]) => void;
-    clearCache: (userId: string) => Promise<void>;
+    /** Drop the cached records for one (user, family) partition. */
+    clearCache: (userId: string, family: DataSourceFamilyId) => Promise<void>;
     reset: () => void;
 }
 
@@ -88,16 +90,19 @@ export function useGoogleHealthData(): GoogleHealthDataState {
     }, []);
 
     const startFetch = useCallback(
-        async (token: string, userId: string) => {
+        async (token: string, userId: string, family: DataSourceFamilyId) => {
             const abortController = new AbortController();
             fetchAbortRef.current = abortController;
             setFetching(true);
             setFetchProgress("Loading cached data...");
 
+            // Cache reads, writes and the incremental watermark are all scoped to
+            // (user, family), so switching family never mixes two datasets.
+            const scope = cacheScope(userId, family);
             const newRawRecords: GoogleHealthSleepDataPoint[] = [];
 
             try {
-                const cachedRaw = await getCachedRecords(userId);
+                const cachedRaw = await getCachedRecords(scope);
                 if (cachedRaw.length > 0) {
                     rawRecordsRef.current = [...cachedRaw];
                     const parsed = parseGoogleHealthDataPoints(cachedRaw);
@@ -109,7 +114,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
                     setFetchProgress("Starting...");
                 }
 
-                const latestDate = await getLatestDateOfSleep(userId);
+                const latestDate = await getLatestDateOfSleep(scope);
 
                 const onPageData = (pageRecords: GoogleHealthSleepDataPoint[], totalSoFar: number, page: number) => {
                     rawRecordsRef.current.push(...pageRecords);
@@ -124,9 +129,9 @@ export function useGoogleHealthData(): GoogleHealthDataState {
                 };
 
                 if (latestDate) {
-                    await fetchNewSleepRecords(token, latestDate, onPageData, abortController.signal);
+                    await fetchNewSleepRecords(token, latestDate, family, onPageData, abortController.signal);
                 } else {
-                    await fetchAllSleepRecords(token, onPageData, abortController.signal);
+                    await fetchAllSleepRecords(token, family, onPageData, abortController.signal);
                 }
 
                 if (newRawRecords.length > 0) {
@@ -155,7 +160,7 @@ export function useGoogleHealthData(): GoogleHealthDataState {
                 fetchAbortRef.current = null;
 
                 if (newRawRecords.length > 0) {
-                    putRecords(userId, newRawRecords).catch((err: unknown) =>
+                    putRecords(scope, newRawRecords).catch((err: unknown) =>
                         console.warn("[googlehealthCache] Failed to write new records:", err)
                     );
                 }
@@ -188,8 +193,8 @@ export function useGoogleHealthData(): GoogleHealthDataState {
     );
 
     const clearCache = useCallback(
-        async (userId: string) => {
-            await clearUserCache(userId);
+        async (userId: string, family: DataSourceFamilyId) => {
+            await clearUserCache(cacheScope(userId, family));
             rawRecordsRef.current = [];
             setRecords([]);
             setFetchProgress("");

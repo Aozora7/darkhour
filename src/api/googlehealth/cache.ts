@@ -3,6 +3,11 @@ import { dataPointId } from "./types";
 import { browserOffsetMinutes, parseUtcOffset, toInstant, zonedDateStr } from "../../utils/zonedTime";
 
 interface CachedGoogleHealthRecord extends GoogleHealthSleepDataPoint {
+    /**
+     * Cache partition, `"{userId}::{family}"` — see `cacheScope()`. Stored in a
+     * field still named `_userId` so the existing indexes keep working; it is the
+     * scope, not the bare user id.
+     */
     _userId?: string;
     dateOfSleep: string; // derived field for querying
 }
@@ -55,8 +60,8 @@ function getDb(): Promise<IDBDatabase> {
     return dbPromise;
 }
 
-/** Read all cached raw records for a user, sorted by dateOfSleep via compound index. */
-export async function getCachedRecords(userId: string): Promise<GoogleHealthSleepDataPoint[]> {
+/** Read all cached raw records for a scope, sorted by dateOfSleep via compound index. */
+export async function getCachedRecords(scope: string): Promise<GoogleHealthSleepDataPoint[]> {
     if (!isIdbAvailable()) return [];
     try {
         const db = await getDb();
@@ -64,7 +69,7 @@ export async function getCachedRecords(userId: string): Promise<GoogleHealthSlee
             const tx = db.transaction(STORE_NAME, "readonly");
             const store = tx.objectStore(STORE_NAME);
             const index = store.index("userId_dateOfSleep");
-            const range = IDBKeyRange.bound([userId, ""], [userId, "\uffff"]);
+            const range = IDBKeyRange.bound([scope, ""], [scope, "\uffff"]);
             const results: GoogleHealthSleepDataPoint[] = [];
             const request = index.openCursor(range);
 
@@ -89,8 +94,8 @@ export async function getCachedRecords(userId: string): Promise<GoogleHealthSlee
     }
 }
 
-/** Get the most recent dateOfSleep string for a user (O(1) via reverse cursor). */
-export async function getLatestDateOfSleep(userId: string): Promise<string | null> {
+/** Get the most recent dateOfSleep string for a scope (O(1) via reverse cursor). */
+export async function getLatestDateOfSleep(scope: string): Promise<string | null> {
     if (!isIdbAvailable()) return null;
     try {
         const db = await getDb();
@@ -98,7 +103,7 @@ export async function getLatestDateOfSleep(userId: string): Promise<string | nul
             const tx = db.transaction(STORE_NAME, "readonly");
             const store = tx.objectStore(STORE_NAME);
             const index = store.index("userId_dateOfSleep");
-            const range = IDBKeyRange.bound([userId, ""], [userId, "\uffff"]);
+            const range = IDBKeyRange.bound([scope, ""], [scope, "\uffff"]);
             const request = index.openCursor(range, "prev");
 
             request.onsuccess = () => {
@@ -113,8 +118,8 @@ export async function getLatestDateOfSleep(userId: string): Promise<string | nul
     }
 }
 
-/** Write records to the cache. Adds _userId and derived dateOfSleep to each record. */
-export async function putRecords(userId: string, records: GoogleHealthSleepDataPoint[]): Promise<void> {
+/** Write records to a scope's cache, adding _userId and a derived dateOfSleep. */
+export async function putRecords(scope: string, records: GoogleHealthSleepDataPoint[]): Promise<void> {
     if (!isIdbAvailable() || records.length === 0) return;
     try {
         const db = await getDb();
@@ -136,7 +141,7 @@ export async function putRecords(userId: string, records: GoogleHealthSleepDataP
                     ? toInstant(record.sleep.interval.startTime, offset).getTime()
                     : Date.now();
                 const dateOfSleep = Number.isFinite(startMs) ? zonedDateStr(startMs, offset) : "";
-                store.put({ ...record, name: id, _userId: userId, dateOfSleep });
+                store.put({ ...record, name: id, _userId: scope, dateOfSleep });
             }
 
             tx.oncomplete = () => resolve();
@@ -147,8 +152,8 @@ export async function putRecords(userId: string, records: GoogleHealthSleepDataP
     }
 }
 
-/** Delete all records for a user. */
-export async function clearUserCache(userId: string): Promise<void> {
+/** Delete every record in a scope. */
+export async function clearUserCache(scope: string): Promise<void> {
     if (!isIdbAvailable()) return;
     try {
         const db = await getDb();
@@ -156,7 +161,7 @@ export async function clearUserCache(userId: string): Promise<void> {
             const tx = db.transaction(STORE_NAME, "readwrite");
             const store = tx.objectStore(STORE_NAME);
             const index = store.index("userId");
-            const range = IDBKeyRange.only(userId);
+            const range = IDBKeyRange.only(scope);
             const request = index.openCursor(range);
 
             request.onsuccess = () => {

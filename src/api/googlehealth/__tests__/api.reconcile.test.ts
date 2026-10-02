@@ -72,7 +72,9 @@ describe("reconcile endpoint", () => {
         const { fetchAllSleepRecords } = await importApi();
 
         const seen: Array<[number, number]> = [];
-        const records = await fetchAllSleepRecords("token", (_page, total, page) => seen.push([total, page]));
+        const records = await fetchAllSleepRecords("token", "all-sources", (_page, total, page) =>
+            seen.push([total, page])
+        );
 
         expect(fetchMock).toHaveBeenCalledTimes(2);
         expect(new URL(fetchMock.mock.calls[1]![0] as string).searchParams.get("pageToken")).toBe("tok");
@@ -91,7 +93,7 @@ describe("reconcile endpoint", () => {
         });
         const { fetchAllSleepRecords } = await importApi();
 
-        await fetchAllSleepRecords("token", undefined, controller.signal);
+        await fetchAllSleepRecords("token", "all-sources", undefined, controller.signal);
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
@@ -168,5 +170,93 @@ describe("incremental filter", () => {
         await fetchNewSleepRecords("token", "");
 
         expect(new URL(fetchMock.mock.calls[0]![0] as string).searchParams.has("filter")).toBe(false);
+    });
+});
+
+describe("dataSourceFamily", () => {
+    const familyParam = () => new URL(fetchMock.mock.calls[0]![0] as string).searchParams.get("dataSourceFamily");
+
+    it("is sent as a full resource URI", async () => {
+        fetchMock.mockResolvedValue(jsonResponse({ dataPoints: [], nextPageToken: "" }));
+        const { fetchAllSleepRecords } = await importApi();
+
+        await fetchAllSleepRecords("token", "google-wearables");
+
+        // Short identifiers are rejected with 400 INVALID_ARGUMENT.
+        expect(familyParam()).toBe("users/me/dataSourceFamilies/google-wearables");
+    });
+
+    it("omits the parameter for all-sources, the server default", async () => {
+        fetchMock.mockResolvedValue(jsonResponse({ dataPoints: [], nextPageToken: "" }));
+        const { fetchAllSleepRecords } = await importApi();
+
+        await fetchAllSleepRecords("token", "all-sources");
+
+        expect(familyParam()).toBeNull();
+    });
+
+    it("omits the parameter when no family is given at all", async () => {
+        fetchMock.mockResolvedValue(jsonResponse({ dataPoints: [], nextPageToken: "" }));
+        const { fetchAllSleepRecords } = await importApi();
+
+        await fetchAllSleepRecords("token");
+
+        expect(familyParam()).toBeNull();
+    });
+
+    it("applies to incremental fetches too", async () => {
+        fetchMock.mockResolvedValue(jsonResponse({ dataPoints: [], nextPageToken: "" }));
+        const { fetchNewSleepRecords } = await importApi();
+
+        await fetchNewSleepRecords("token", "2024-01-15", "google-sources");
+
+        expect(familyParam()).toBe("users/me/dataSourceFamilies/google-sources");
+    });
+
+    it("combines with the filter and pagination params", async () => {
+        fetchMock
+            .mockResolvedValueOnce(jsonResponse({ dataPoints: [], nextPageToken: "tok" }))
+            .mockResolvedValueOnce(jsonResponse({ dataPoints: [], nextPageToken: "" }));
+        const { fetchNewSleepRecords } = await importApi();
+
+        await fetchNewSleepRecords("token", "2024-01-15", "google-wearables");
+
+        const first = new URL(fetchMock.mock.calls[0]![0] as string).searchParams;
+        expect(first.get("dataSourceFamily")).toBe("users/me/dataSourceFamilies/google-wearables");
+        expect(first.get("filter")).toBe('sleep.interval.civil_end_time >= "2024-01-15"');
+        expect(first.get("pageSize")).toBe("25");
+
+        const second = new URL(fetchMock.mock.calls[1]![0] as string).searchParams;
+        expect(second.get("pageToken")).toBe("tok");
+        expect(second.get("dataSourceFamily")).toBe("users/me/dataSourceFamilies/google-wearables");
+    });
+});
+
+describe("family helpers", () => {
+    it("scopes the cache per user and family", async () => {
+        const { cacheScope } = await import("../types");
+        expect(cacheScope("u1", "all-sources")).not.toBe(cacheScope("u1", "google-wearables"));
+        expect(cacheScope("u1", "all-sources")).not.toBe(cacheScope("u2", "all-sources"));
+        expect(cacheScope("u1", "all-sources")).toBe(cacheScope("u1", "all-sources"));
+    });
+
+    it("validates persisted values, falling back for unknown ones", async () => {
+        const { isDataSourceFamilyId, DEFAULT_DATA_SOURCE_FAMILY, DATA_SOURCE_FAMILY_OPTIONS } =
+            await import("../types");
+        expect(DEFAULT_DATA_SOURCE_FAMILY).toBe("all-sources");
+        for (const opt of DATA_SOURCE_FAMILY_OPTIONS) {
+            expect(isDataSourceFamilyId(opt.id)).toBe(true);
+        }
+        // A removed option or hand-edited localStorage must not leak through.
+        expect(isDataSourceFamilyId("google-everything")).toBe(false);
+        expect(isDataSourceFamilyId("")).toBe(false);
+        expect(isDataSourceFamilyId(null)).toBe(false);
+        expect(isDataSourceFamilyId(42)).toBe(false);
+    });
+
+    it("builds resource URIs from the full path form", async () => {
+        const { dataSourceFamilyResource } = await import("../types");
+        expect(dataSourceFamilyResource("google-sources")).toBe("users/me/dataSourceFamilies/google-sources");
+        expect(dataSourceFamilyResource()).toBe("users/me/dataSourceFamilies/all-sources");
     });
 });

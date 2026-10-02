@@ -178,6 +178,69 @@ export interface GoogleHealthSleepPage {
     nextPageToken?: string;
 }
 
+/**
+ * Which slice of the user's data to reconcile.
+ *
+ * This is a *server-side* selection: it changes what the API returns, not what
+ * the client keeps. The three families overlap rather than partition cleanly, so
+ * switching between them yields genuinely different record sets.
+ */
+export type DataSourceFamilyId = "all-sources" | "google-wearables" | "google-sources";
+
+export interface DataSourceFamilyOption {
+    id: DataSourceFamilyId;
+    label: string;
+    description: string;
+}
+
+export const DATA_SOURCE_FAMILY_OPTIONS: readonly DataSourceFamilyOption[] = [
+    {
+        id: "all-sources",
+        label: "All sources",
+        description:
+            "Everything recorded, reconciled across first- and third-party sources. Includes manual entries and phone-estimated data.",
+    },
+    {
+        id: "google-wearables",
+        label: "Wearables only",
+        description: "Google and Fitbit trackers and Pixel Watch. Excludes manual entries and phone-estimated data.",
+    },
+    {
+        id: "google-sources",
+        label: "Google sources",
+        description: "First-party sources: trackers, Health Connect, and manual entries logged in first-party apps.",
+    },
+] as const;
+
+export const DEFAULT_DATA_SOURCE_FAMILY: DataSourceFamilyId = "all-sources";
+
+export function isDataSourceFamilyId(value: unknown): value is DataSourceFamilyId {
+    return typeof value === "string" && DATA_SOURCE_FAMILY_OPTIONS.some((o) => o.id === value);
+}
+
+/**
+ * Full resource URI for the `dataSourceFamily` query parameter.
+ *
+ * The API rejects short identifiers (`"google-wearables"`, `"wearables"`,
+ * `"FITBIT"`) with `400 INVALID_ARGUMENT`, so the resource form is mandatory.
+ *
+ * @see https://developers.google.com/health/filters#filter-by-data-source
+ */
+export function dataSourceFamilyResource(family: DataSourceFamilyId = DEFAULT_DATA_SOURCE_FAMILY): string {
+    return `users/me/dataSourceFamilies/${family}`;
+}
+
+/**
+ * Cache partition for a user's data.
+ *
+ * Records fetched under one family are a different dataset from another, so they
+ * must never be mixed: an incremental fetch from one family against a watermark
+ * recorded under another would skip or duplicate records.
+ */
+export function cacheScope(userId: string, family: DataSourceFamilyId): string {
+    return `${userId}::${family}`;
+}
+
 /** Resolve the resource identifier across the `name` / `dataPointName` variants. */
 export function dataPointId(dp: GoogleHealthSleepDataPoint): string | undefined {
     return dp.dataPointName || dp.name || undefined;

@@ -1,5 +1,11 @@
 import { healthFetch } from "./googlehealth";
-import { dataPointId, type GoogleHealthSleepDataPoint, type GoogleHealthSleepPage } from "./types";
+import {
+    dataPointId,
+    dataSourceFamilyResource,
+    type DataSourceFamilyId,
+    type GoogleHealthSleepDataPoint,
+    type GoogleHealthSleepPage,
+} from "./types";
 
 /**
  * The `reconcile` endpoint resolves overlapping intervals across sync batches and
@@ -41,6 +47,7 @@ function normalizeDataPoints(points: GoogleHealthSleepDataPoint[]): GoogleHealth
 async function fetchPaged(
     token: string,
     filter: string | undefined,
+    family: DataSourceFamilyId | undefined,
     onPageData: OnPageData | undefined,
     signal: AbortSignal | undefined
 ): Promise<GoogleHealthSleepDataPoint[]> {
@@ -55,6 +62,12 @@ async function fetchPaged(
         if (pageToken) query.set("pageToken", pageToken);
         query.set("pageSize", String(PAGE_SIZE));
         if (filter) query.set("filter", filter);
+        // Omitting the parameter selects the server default (`all-sources`), which
+        // is what we want for the default setting — sending it explicitly for a
+        // family the account has no access to would fail the request.
+        if (family && family !== "all-sources") {
+            query.set("dataSourceFamily", dataSourceFamilyResource(family));
+        }
 
         const data = await healthFetch<GoogleHealthSleepPage>(`${RECONCILE_PATH}?${query.toString()}`, token, signal);
         page++;
@@ -78,10 +91,11 @@ async function fetchPaged(
 /** Fetch every reconciled sleep record. Paginates until exhausted. */
 export async function fetchAllSleepRecords(
     token: string,
+    family?: DataSourceFamilyId,
     onPageData?: OnPageData,
     signal?: AbortSignal
 ): Promise<GoogleHealthSleepDataPoint[]> {
-    return fetchPaged(token, undefined, onPageData, signal);
+    return fetchPaged(token, undefined, family, onPageData, signal);
 }
 
 /**
@@ -95,13 +109,17 @@ export async function fetchAllSleepRecords(
  *
  * Only `>=` and `<` comparators are supported, and `sleep` exposes
  * `interval.end_time` / `interval.civil_end_time` — not `start_time`.
+ *
+ * The watermark is only meaningful within one `family`, so callers must pass the
+ * same family the cached records were fetched under.
  */
 export async function fetchNewSleepRecords(
     token: string,
     afterDate: string,
+    family?: DataSourceFamilyId,
     onPageData?: OnPageData,
     signal?: AbortSignal
 ): Promise<GoogleHealthSleepDataPoint[]> {
     const filter = afterDate ? `sleep.interval.civil_end_time >= "${afterDate}"` : undefined;
-    return fetchPaged(token, filter, onPageData, signal);
+    return fetchPaged(token, filter, family, onPageData, signal);
 }

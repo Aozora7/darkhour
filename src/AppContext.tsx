@@ -10,6 +10,7 @@ import type { ScheduleEntry, AppState } from "./AppContextDef";
 import type { ColorMode } from "./components/Actogram/useActogramRenderer";
 import { getMaxCanvasHeightByUserAgent } from "./utils/getMaxCanvasHeightByUserAgent";
 import { MS_PER_DAY, referenceOffset, zonedDateStr, zonedDayStartMs } from "./utils/zonedTime";
+import { DEFAULT_DATA_SOURCE_FAMILY, isDataSourceFamilyId, type DataSourceFamilyId } from "./api/googlehealth/types";
 
 const MAX_CANVAS_HEIGHT = getMaxCanvasHeightByUserAgent();
 
@@ -31,6 +32,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [colorMode, setColorMode] = usePersistedState<ColorMode>("viz.colorMode", "stages");
     const [tauHours, setTauHours] = usePersistedState("viz.tauHours", 24);
     const [sortDirection, setSortDirection] = usePersistedState<"newest" | "oldest">("viz.sortDirection", "newest");
+
+    // Which slice of the user's data to fetch. This changes what the API returns,
+    // not what the client keeps, so it lives with the fetch settings rather than
+    // the viz ones. A persisted value that is no longer a known family (removed
+    // option, hand-edited storage) falls back to the server default.
+    const [storedFamily, setStoredFamily] = usePersistedState<string>(
+        "fetch.dataSourceFamily",
+        DEFAULT_DATA_SOURCE_FAMILY
+    );
+    const dataSourceFamily: DataSourceFamilyId = isDataSourceFamilyId(storedFamily)
+        ? storedFamily
+        : DEFAULT_DATA_SOURCE_FAMILY;
+    const setDataSourceFamily = useCallback((v: DataSourceFamilyId) => setStoredFamily(v), [setStoredFamily]) as (
+        v: DataSourceFamilyId
+    ) => void;
 
     // Schedule overlay (persisted to localStorage)
     const [showSchedule, setShowSchedule] = usePersistedState("viz.showSchedule", false);
@@ -63,9 +79,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             !autoFetchedRef.current
         ) {
             autoFetchedRef.current = true;
-            data.startFetch(auth.token, auth.userId);
+            data.startFetch(auth.token, auth.userId, dataSourceFamily);
         }
-    }, [auth.loading, auth.token, auth.userId, data.records.length, data.fetching, data.startFetch]);
+    }, [auth.loading, auth.token, auth.userId, data.records.length, data.fetching, data.startFetch, dataSourceFamily]);
 
     // Reset auto-fetch guard when token changes (allows retry after token refresh)
     useEffect(() => {
@@ -172,8 +188,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, [filteredRecords, daySpan]);
 
     const handleFetch = useCallback(() => {
-        if (auth.token && auth.userId) data.startFetch(auth.token, auth.userId);
-    }, [auth.token, auth.userId, data.startFetch]);
+        if (auth.token && auth.userId) data.startFetch(auth.token, auth.userId, dataSourceFamily);
+    }, [auth.token, auth.userId, data.startFetch, dataSourceFamily]);
 
     const hasClientId = !!import.meta.env.VITE_GOOGLE_HEALTH_CLIENT_ID;
 
@@ -188,6 +204,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             circadianAnalysis,
             circadianAlgorithmId,
             setCircadianAlgorithmId,
+            dataSourceFamily,
+            setDataSourceFamily,
             forecastDays,
             setForecastDays,
             forecastDisabled,
