@@ -25,11 +25,33 @@ const STORE_NAME = "sleepRecords";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+/**
+ * Set once an upgrade is found to be blocked by another connection.
+ *
+ * Only the *first* blocked `open` fires `blocked`; subsequent opens queue behind
+ * it and emit no event at all, so relying on `onblocked` alone still leaves later
+ * reads pending forever. Once we know the cache is wedged we stop using it for the
+ * rest of this page load — the cache is an optimisation, and every reader already
+ * degrades to "nothing cached". The next page load gets a fresh module and tries
+ * again, by which time the other tab has usually gone.
+ */
+let blocked = false;
+
 export function isIdbAvailable(): boolean {
     return typeof indexedDB !== "undefined";
 }
 
+/**
+ * Open the database, memoised for the page's lifetime.
+ *
+ * `indexedDB.open` has three outcomes, not two. If another connection holds an
+ * older version, the request fires `blocked` and then settles **neither** way —
+ * no `success`, no `error` — until that connection closes.
+ */
 function getDb(): Promise<IDBDatabase> {
+    if (blocked) {
+        return Promise.reject(new Error("IndexedDB unavailable: upgrade previously blocked"));
+    }
     if (dbPromise) return dbPromise;
 
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
@@ -48,6 +70,17 @@ function getDb(): Promise<IDBDatabase> {
                 // Drop pre-reconcile records; see DB_VERSION.
                 tx.objectStore(STORE_NAME).clear();
             }
+        };
+
+        request.onblocked = () => {
+            blocked = true;
+            dbPromise = null;
+            reject(new Error("IndexedDB upgrade blocked by another open connection"));
+
+            // The open request cannot be cancelled, so it stays pending and will
+            // eventually hand back a connection nobody references. Close it when it
+            // lands, otherwise that stray connection would block later upgrades.
+            request.onsuccess = () => request.result.close();
         };
 
         request.onsuccess = () => resolve(request.result);
