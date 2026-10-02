@@ -105,3 +105,55 @@ describe("legacy v1.2 records", () => {
         expect(rec!.startTime.toISOString()).toBe("2017-07-17T02:06:00.000Z");
     });
 });
+
+describe("raw reconcile responses", () => {
+    // `reconcile` identifies data points with `dataPointName` rather than `name`,
+    // and timestamps may already carry a `Z` designator.
+    const RECONCILE_PAGE = {
+        dataPoints: [
+            {
+                dataPointName: "users/1/dataTypes/sleep/dataPoints/111",
+                dataSource: { recordingMethod: "DERIVED", platform: "FITBIT" },
+                sleep: {
+                    interval: {
+                        startTime: "2026-03-03T20:57:30Z",
+                        startUtcOffset: "0s",
+                        endTime: "2026-03-04T04:41:30Z",
+                        endUtcOffset: "0s",
+                    },
+                    type: "STAGES",
+                    metadata: { stagesStatus: "SUCCEEDED", processed: true, main: true },
+                    summary: { minutesAsleep: "407", minutesAwake: "57" },
+                },
+            },
+        ],
+        nextPageToken: "",
+    };
+
+    it("is recognized as Google Health data despite the identifier field", () => {
+        const [rec] = parseSleepData(RECONCILE_PAGE);
+        expect(rec).toBeDefined();
+        expect(rec!.logId).toBe(111);
+    });
+
+    it("recognizes a bare array of reconcile data points", () => {
+        const [rec] = parseSleepData(RECONCILE_PAGE.dataPoints);
+        expect(rec!.logId).toBe(111);
+    });
+
+    it("honours metadata.main", () => {
+        const [rec] = parseSleepData(RECONCILE_PAGE);
+        expect(rec!.isMainSleep).toBe(true);
+    });
+
+    it("keeps distinct logIds so records never collapse together", () => {
+        const second = structuredClone(RECONCILE_PAGE);
+        second.dataPoints[0]!.dataPointName = "users/1/dataTypes/sleep/dataPoints/222";
+        second.dataPoints[0]!.sleep.interval.startTime = "2026-03-04T20:57:30Z";
+        second.dataPoints[0]!.sleep.interval.endTime = "2026-03-05T04:41:30Z";
+
+        const records = parseSleepData([RECONCILE_PAGE, second]);
+        expect(records).toHaveLength(2);
+        expect(new Set(records.map((r) => r.logId)).size).toBe(2);
+    });
+});

@@ -1,5 +1,6 @@
 import type { SleepLevelEntry, SleepRecord, SleepStageLevel, SleepStages } from "../types";
 import type { GoogleHealthSleepDataPoint, GoogleHealthSleepStage } from "./types";
+import { dataPointId } from "./types";
 import {
     browserOffsetMinutes,
     parseUtcOffset,
@@ -74,10 +75,15 @@ function buildStagesSummary(dataPoint: GoogleHealthSleepDataPoint): SleepStages 
 }
 
 function deriveLogId(dataPoint: GoogleHealthSleepDataPoint, startTime: Date): number {
-    const parts = dataPoint.name ? dataPoint.name.split("/") : [];
-    const last = parts[parts.length - 1] ?? "";
+    // `reconcile` identifies records via `dataPointName`, `list` via `name`.
+    const id = dataPointId(dataPoint);
+    if (!id) return startTime.getTime();
+
+    const last = id.split("/").pop() ?? "";
+    // Guard against `Number("")` === 0, which would collapse every id-less
+    // record onto logId 0 and silently drop all but one of them.
     const parsed = Number(last);
-    return Number.isFinite(parsed) ? parsed : startTime.getTime();
+    return last !== "" && Number.isFinite(parsed) && Number.isSafeInteger(parsed) ? parsed : startTime.getTime();
 }
 
 export function parseGoogleHealthDataPoints(dataPoints: GoogleHealthSleepDataPoint[]): SleepRecord[] {
@@ -112,7 +118,10 @@ export function parseGoogleHealthDataPoint(dp: GoogleHealthSleepDataPoint): Slee
             durationMs > 0 ? Math.max(0, Math.min(100, Math.round((minutesAsleep * 60000 * 100) / durationMs))) : 0,
         minutesAsleep,
         minutesAwake,
-        isMainSleep: dp.sleep?.isMainSleep ?? true,
+        // The REST reference names this `metadata.mainSleep`; the Endpoints guide's
+        // sample payload uses `main`. The legacy top-level `isMainSleep` is not
+        // populated by the live API at all.
+        isMainSleep: dp.sleep?.metadata?.mainSleep ?? dp.sleep?.metadata?.main ?? dp.sleep?.isMainSleep ?? true,
         sleepScore: 0,
     };
 

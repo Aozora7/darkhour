@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseGoogleHealthDataPoint } from "../parse";
-import type { GoogleHealthSleepDataPoint } from "../types";
+import type { GoogleHealthDataSource, GoogleHealthSleepDataPoint } from "../types";
+import { recordProvenance } from "../types";
 import { hostOffsetAt } from "../../../utils/zonedTime";
 
 /** Protobuf Duration strings for the offsets used below. */
@@ -126,5 +127,118 @@ describe("parseGoogleHealthDataPoint — time zones", () => {
         ];
         const rec = parseGoogleHealthDataPoint(dp);
         expect(rec.stageData).toEqual([]);
+    });
+});
+
+describe("identifier handling across endpoints", () => {
+    it("derives logId from dataPointName (reconcile)", () => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        delete (dp as { name?: string }).name;
+        dp.dataPointName = "users/1/dataTypes/sleep/dataPoints/987654321";
+
+        expect(parseGoogleHealthDataPoint(dp).logId).toBe(987654321);
+    });
+
+    it("derives logId from name (list)", () => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        dp.name = "users/1/dataTypes/sleep/dataPoints/123456789";
+
+        expect(parseGoogleHealthDataPoint(dp).logId).toBe(123456789);
+    });
+
+    it("falls back to the start instant when no id is present", () => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        delete (dp as { name?: string }).name;
+        const rec = parseGoogleHealthDataPoint(dp);
+        expect(rec.logId).toBe(rec.startTime.getTime());
+    });
+});
+
+describe("isMainSleep", () => {
+    it("reads metadata.mainSleep, the field the REST reference documents", () => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        dp.sleep.metadata = { stagesStatus: "SUCCEEDED", processed: true, mainSleep: false };
+
+        expect(parseGoogleHealthDataPoint(dp).isMainSleep).toBe(false);
+    });
+
+    it("accepts the `main` spelling seen in sample payloads", () => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        dp.sleep.metadata = { main: false };
+
+        expect(parseGoogleHealthDataPoint(dp).isMainSleep).toBe(false);
+    });
+
+    it("prefers mainSleep when both spellings are present", () => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        dp.sleep.metadata = { mainSleep: true, main: false };
+
+        expect(parseGoogleHealthDataPoint(dp).isMainSleep).toBe(true);
+    });
+
+    it("falls back to the legacy top-level isMainSleep, then to true", () => {
+        const legacy = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        legacy.sleep.isMainSleep = false;
+        expect(parseGoogleHealthDataPoint(legacy).isMainSleep).toBe(false);
+
+        const bare = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        expect(parseGoogleHealthDataPoint(bare).isMainSleep).toBe(true);
+    });
+});
+
+describe("recordProvenance", () => {
+    const withSource = (dataSource: GoogleHealthDataSource) => {
+        const dp = dataPoint("2024-01-15 22:00:00", "2024-01-16 06:00:00", UTC8);
+        dp.dataSource = dataSource;
+        return dp;
+    };
+
+    it("identifies a hand-entered sleep logged through Fitbit", () => {
+        // Real shape observed in a Google Health export.
+        const p = recordProvenance(withSource({ recordingMethod: "MANUAL", device: {}, platform: "FITBIT" }));
+        expect(p.manuallyLogged).toBe(true);
+        expect(p.fromHealthConnect).toBe(false);
+        expect(p.fromDevice).toBe(false);
+        expect(p.deviceName).toBeUndefined();
+    });
+
+    it("identifies an algorithm-derived sleep from a wearable", () => {
+        const p = recordProvenance(
+            withSource({ recordingMethod: "DERIVED", device: { displayName: "Charge 5" }, platform: "FITBIT" })
+        );
+        expect(p.manuallyLogged).toBe(false);
+        expect(p.fromDevice).toBe(true);
+        expect(p.deviceName).toBe("Charge 5");
+    });
+
+    it("identifies Health Connect as the origin independently of how it was captured", () => {
+        const manual = recordProvenance(withSource({ recordingMethod: "MANUAL", platform: "HEALTH_CONNECT" }));
+        expect(manual.fromHealthConnect).toBe(true);
+        expect(manual.manuallyLogged).toBe(true);
+
+        const passive = recordProvenance(
+            withSource({ recordingMethod: "PASSIVELY_MEASURED", platform: "HEALTH_CONNECT" })
+        );
+        expect(passive.fromHealthConnect).toBe(true);
+        expect(passive.manuallyLogged).toBe(false);
+    });
+
+    it("exposes the third-party package name when present", () => {
+        const p = recordProvenance(
+            withSource({
+                recordingMethod: "UNKNOWN",
+                platform: "GOOGLE_PARTNER_INTEGRATION",
+                application: { packageName: "com.example.app" },
+            })
+        );
+        expect(p.manuallyLogged).toBe(false);
+        expect(p.packageName).toBe("com.example.app");
+    });
+
+    it("tolerates a data point with no dataSource at all", () => {
+        const p = recordProvenance(withSource(undefined as unknown as GoogleHealthDataSource));
+        expect(p.manuallyLogged).toBe(false);
+        expect(p.fromHealthConnect).toBe(false);
+        expect(p.fromDevice).toBe(false);
     });
 });

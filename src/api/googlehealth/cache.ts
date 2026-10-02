@@ -1,4 +1,5 @@
 import type { GoogleHealthSleepDataPoint } from "./types";
+import { dataPointId } from "./types";
 import { browserOffsetMinutes, parseUtcOffset, toInstant, zonedDateStr } from "../../utils/zonedTime";
 
 interface CachedGoogleHealthRecord extends GoogleHealthSleepDataPoint {
@@ -7,7 +8,14 @@ interface CachedGoogleHealthRecord extends GoogleHealthSleepDataPoint {
 }
 
 const DB_NAME = "darkhour-cache";
-const DB_VERSION = 1;
+/**
+ * v2 — the app reads from the `reconcile` endpoint, which omits subordinate
+ * records from overlapping sync batches. Cached v1 records came from `list` and
+ * can include both a winner and its subordinate, which cannot be reconciled away
+ * client-side (they have different IDs, so logId dedup keeps both). The store is
+ * therefore cleared on upgrade so the next fetch rebuilds it from `reconcile`.
+ */
+const DB_VERSION = 2;
 const STORE_NAME = "sleepRecords";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -22,13 +30,18 @@ function getDb(): Promise<IDBDatabase> {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        request.onupgradeneeded = () => {
+        request.onupgradeneeded = (event) => {
             const db = request.result;
+            const tx = request.transaction;
+
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 // We use 'name' as the unique key, derived from the resource name
                 const store = db.createObjectStore(STORE_NAME, { keyPath: "name" });
                 store.createIndex("userId", "_userId", { unique: false });
                 store.createIndex("userId_dateOfSleep", ["_userId", "dateOfSleep"], { unique: false });
+            } else if (event.oldVersion < DB_VERSION && tx) {
+                // Drop pre-reconcile records; see DB_VERSION.
+                tx.objectStore(STORE_NAME).clear();
             }
         };
 
@@ -110,6 +123,12 @@ export async function putRecords(userId: string, records: GoogleHealthSleepDataP
             const store = tx.objectStore(STORE_NAME);
 
             for (const record of records) {
+                // The store's keyPath is "name", but reconcile responses identify
+                // records via "dataPointName" — normalize before writing, and skip
+                // anything still unidentified rather than failing the whole batch.
+                const id = dataPointId(record);
+                if (!id) continue;
+
                 // Index on the day the sleep was *recorded* in, not the UTC day, so
                 // the incremental-fetch watermark tracks the subject's own calendar.
                 const offset = parseUtcOffset(record.sleep?.interval?.startUtcOffset) ?? browserOffsetMinutes();
@@ -117,7 +136,7 @@ export async function putRecords(userId: string, records: GoogleHealthSleepDataP
                     ? toInstant(record.sleep.interval.startTime, offset).getTime()
                     : Date.now();
                 const dateOfSleep = Number.isFinite(startMs) ? zonedDateStr(startMs, offset) : "";
-                store.put({ ...record, _userId: userId, dateOfSleep });
+                store.put({ ...record, name: id, _userId: userId, dateOfSleep });
             }
 
             tx.oncomplete = () => resolve();

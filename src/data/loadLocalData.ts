@@ -112,7 +112,9 @@ function parseAnyRecord(raw: Record<string, unknown>): SleepRecord {
     if ("levels" in raw || "type" in raw) {
         return parseV12Record(raw as unknown as RawSleepRecordV12);
     }
-    if ("name" in raw && "sleep" in raw) {
+    // Google Health data points: `list` responses carry `name`, `reconcile`
+    // responses carry `dataPointName`, and both have a `sleep` object.
+    if ("sleep" in raw && ("name" in raw || "dataPointName" in raw)) {
         return parseGoogleHealthDataPoint(raw as unknown as GoogleHealthSleepDataPoint);
     }
     throw new Error("Unrecognized sleep record format: expected v1.2 (stages) data");
